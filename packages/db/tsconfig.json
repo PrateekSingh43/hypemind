@@ -1,0 +1,15 @@
+{
+  "extends": "@repo/typescript-config/node.json",
+  "compilerOptions": {
+      "target": "es2022",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noEmit": false,
+    // FIX: Must be false when generating output files
+    "allowImportingTsExtensions": false, 
+    // FIX: Ensure declaration files are generated
+    "declaration": true 
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "**/*.config.ts"]
+}

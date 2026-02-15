@@ -1,0 +1,380 @@
+////////////////////////////////////////////////////
+// PRISMA CONFIG
+////////////////////////////////////////////////////
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+////////////////////////////////////////////////////
+// USERS / AUTH
+////////////////////////////////////////////////////
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique @db.Citext
+  passwordHash String?
+  name         String?
+  avatarUrl    String?
+
+  isActive      Boolean @default(true)
+  emailVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships         WorkspaceMember[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  oauthAccounts       UserOAuthAccount[]
+  emailVerifications  EmailVerification[]
+  userSetting         UserSetting?
+
+  createdAreas      Area[]
+  createdProjects   Project[]
+  createdItems      Item[]
+  workspaces        Workspace[]
+  interactionEvents InteractionEvent[]
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(OWNER)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserOAuthAccount {
+  id                String   @id @default(cuid())
+  provider          String
+  providerAccountId String
+  userId            String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserSetting {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  prefs     Json
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+////////////////////////////////////////////////////
+// WORKSPACE
+////////////////////////////////////////////////////
+
+model Workspace {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  createdAt DateTime @default(now())
+
+  members WorkspaceMember[]
+
+  areas Area[]
+  items Item[] // All items in this workspace (including Inbox and Project items)
+  tags  Tag[]
+
+  settings          WorkspaceSetting?
+  interactionEvents InteractionEvent[]
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+model WorkspaceSetting {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  prefs       Json
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+////////////////////////////////////////////////////
+// EXPLICIT PARA HIERARCHY
+////////////////////////////////////////////////////
+
+model Area {
+  id          String  @id @default(cuid())
+  workspaceId String
+  title       String
+  slug        String
+  description String?
+
+  projects Project[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, slug])
+  @@unique([workspaceId, title])
+  @@index([workspaceId])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  areaId      String
+  title       String
+  slug        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+
+  items Item[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  area Area @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@unique([areaId, slug])
+  @@unique([areaId, title])
+  @@index([areaId])
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  COMPLETED
+  ON_HOLD
+}
+
+////////////////////////////////////////////////////
+// KNOWLEDGE ITEMS
+////////////////////////////////////////////////////
+
+enum ItemType {
+  QUICK_NOTE
+  PAGE
+  JOURNAL
+  TASK
+  LINK
+  FILE
+
+  SOCIAL_CLIP 
+}
+
+model Item {
+  id String @id @default(cuid())
+
+  workspaceId String
+  projectId   String?
+
+  title String?
+  type  ItemType
+
+  contentJson Json?
+  url         String?
+  metadata    Json?
+
+  aiSummary    String?                  @db.Text
+  aiMetadata   Json?
+  // Full-text search
+  searchVector Unsupported("tsvector")?
+
+  isPinned Boolean   @default(false)
+  pinnedAt DateTime?
+  position Int?
+
+  lastOpenedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tags    ItemTag[]
+  assets  Asset[]
+  shares  PublicShare[]
+  vectors VectorEmbedding[]
+  events  InteractionEvent[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, projectId])
+  @@index([workspaceId, type])
+  @@index([workspaceId, isPinned, pinnedAt])
+  @@index([workspaceId, updatedAt])
+  @@index([workspaceId, deletedAt])
+  @@index([projectId, position])
+}
+
+////////////////////////////////////////////////////
+// TAGS & META
+////////////////////////////////////////////////////
+
+model Tag {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  items       ItemTag[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model ItemTag {
+  itemId String
+  tagId  String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, tagId])
+}
+
+model Asset {
+  id            String   @id @default(cuid())
+  itemId        String
+  filename      String
+  mimeType      String
+  size          Int
+  storageKey    String
+  extractedText String?
+  createdAt     DateTime @default(now())
+  item          Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+}
+
+model PublicShare {
+  id        String    @id @default(cuid())
+  itemId    String
+  tokenHash String    @unique
+  isPublic  Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+////////////////////////////////////////////////////
+// AI / VECTOR
+////////////////////////////////////////////////////
+
+enum EmbeddingState {
+  PENDING
+  READY
+  FAILED
+}
+
+model VectorEmbedding {
+  id         String @id @default(cuid())
+  itemId     String
+  chunkIndex Int
+
+  embedding Unsupported("vector(1536)")
+
+  model String @default("voyage-4")
+
+  status    EmbeddingState @default(PENDING)
+  createdAt DateTime       @default(now())
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([status])
+  @@index([itemId, chunkIndex])
+}
+
+////////////////////////////////////////////////////
+// INTERACTION EVENTS
+////////////////////////////////////////////////////
+
+enum InteractionAction {
+  VIEW
+  OPEN
+  CREATE
+  EDIT
+  DELETE
+  PIN
+  CLIP
+}
+
+model InteractionEvent {
+  id          String            @id @default(cuid())
+  userId      String
+  workspaceId String
+  itemId      String?
+  action      InteractionAction
+  meta        Json?
+  createdAt   DateTime          @default(now())
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  item        Item?             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([itemId])
+  @@index([createdAt])
+  @@index([workspaceId, createdAt])
+}
