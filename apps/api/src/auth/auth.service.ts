@@ -1,386 +1,445 @@
+import crypto from "crypto";
+import { prisma } from "@repo/db";
+import argon2 from "argon2";
+import {
+	JWT_SECRET,
+	REFRESH_SECRET,
+	EMAIL_SECRET,
+	NODE_ENV,
+	CLIENT_URL,
+} from "../config/env";
+import jwt from "jsonwebtoken";
+import {
+	BadRequestError,
+	UnauthorizedError,
+	ConflictError,
+} from "../errors/httpErrors";
 
-import { type Response } from "express";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../errors/httpErrors";
-import { Prisma, prisma, PrismaClient } from "@repo/db";
-import crypto from "crypto"
-import { hash, verifyPassword } from "../utils/hash"
+// ── Constants ──────────────────────────────────────────
 
-import { EMAIL_SECRET, REFRESH_COOKIE_NAME } from "../config/env";
-import { createPasswordResetToken, generateAccessToken, generateRefreshToken, generateRefreshTokenTx, hmac, setRefreshToken, verifyPasswordResetToken, verifyRefreshToken } from "../utils/token";
-import { createVerifyEmailToken, sendVerificationEmailToken, sendPasswordResetEmail, } from "../utils/email/email";
+const ACCESS_TOKEN_TTL = "15m";
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const RESEND_COOLDOWN_MS = 60 * 1000; // 60 seconds
 
+// ── Helpers ────────────────────────────────────────────
 
+function hmacRefresh(raw: string): string {
+	return crypto.createHmac("sha256", REFRESH_SECRET).update(raw).digest("hex");
+}
 
-export const signupService = async (payload: { email: string, password: string, name: string }) => {
+function hmacEmail(raw: string): string {
+	return crypto.createHmac("sha256", EMAIL_SECRET).update(raw).digest("hex");
+}
 
-	// check if the data has come or not 
+function generateAccessToken(userId: string): string {
+	return jwt.sign({ userId }, JWT_SECRET, {
+		expiresIn: ACCESS_TOKEN_TTL,
+		jwtid: crypto.randomUUID(),
+	});
+}
 
-	if (!payload) {
-		throw new NotFoundError("email and password is missing");
+async function createRefreshToken(userId: string): Promise<{ raw: string; expiresAt: Date }> {
+	const random = crypto.randomBytes(48).toString("hex");
+	const raw = `${userId}.${random}`;
+	const tokenHash = hmacRefresh(raw);
+	const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
+	await prisma.refreshToken.create({
+		data: { tokenHash, userId, expiresAt },
+	});
+
+	return { raw, expiresAt };
+}
+
+async function createEmailVerificationToken(userId: string): Promise<string> {
+	const random = crypto.randomBytes(48).toString("hex");
+	const raw = `${userId}.${random}`;
+	const tokenHash = hmacEmail(raw);
+	const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MS);
+
+	// Delete any existing unused tokens for this user
+	await prisma.emailVerification.deleteMany({
+		where: { userId, usedAt: null },
+	});
+
+	await prisma.emailVerification.create({
+		data: { tokenHash, userId, expiresAt },
+	});
+
+	return raw;
+}
+
+async function getPrimaryWorkspaceId(userId: string): Promise<string | null> {
+	const membership = await prisma.workspaceMember.findFirst({
+		where: { userId },
+		orderBy: { joinedAt: "asc" },
+		select: { workspaceId: true },
+	});
+	return membership?.workspaceId ?? null;
+}
+
+async function buildAuthUser(userId: string) {
+	const user = await prisma.user.findUnique({
+		where: { id: userId },
+		select: {
+			id: true,
+			email: true,
+			name: true,
+			isActive: true,
+			emailVerified: true,
+		},
+	});
+
+	if (!user) {
+		throw new UnauthorizedError("User not found");
 	}
 
-	const { email, password, name } = payload;
-
-
-
-	const cleanEmail = email.trim().toLowerCase();
-
-
-	// check user is present in the db or not 
-
-	const user = await prisma.user.findUnique({ where: { email: cleanEmail } })
-
-	if (user) {
-		throw new ConflictError("User already exits please log in ");
+	if (!user.isActive) {
+		throw new UnauthorizedError("Account is deactivated");
 	}
 
-	// hashing password 
+	if (!user.emailVerified) {
+		throw new UnauthorizedError("Email not verified. Check your inbox.");
+	}
 
-	const hashPassword = await hash(password)
+	const workspaceId = await getPrimaryWorkspaceId(user.id);
 
-	// create new user with workspace in a transaction
-	const newUser = await prisma.$transaction(async (tx: { user: { create: (arg0: { data: { email: string; passwordHash: string; name: string; }; }) => any; }; workspace: { create: (arg0: { data: { name: string; slug: string; members: { create: { userId: any; role: string; }; }; settings: { create: { prefs: { onboardingStep: number; theme: string; }; }; }; }; }) => any; }; collection: { createMany: (arg0: { data: { workspaceId: any; title: string; type: string; description: string; }[]; }) => any; }; node: { create: (arg0: { data: { workspaceId: any; title: string; type: string; studioState: string; contentHtml: string; isPinned: boolean; lastOpenedAt: Date; } | { workspaceId: any; title: string; type: string; studioState: string; metadata: { date: string; }; lastOpenedAt: Date; }; }) => any; }; }) => {
-		// Create user
-		const createdUser = await tx.user.create({
-			data: {
-				email: cleanEmail,
-				passwordHash: hashPassword,
-				name
-			}
+	return {
+		id: user.id,
+		email: user.email,
+		name: user.name ?? "",
+		workspaceId,
+	};
+}
+
+// ── Service ────────────────────────────────────────────
+
+export async function register(email: string, password: string, name: string) {
+	const existing = await prisma.user.findUnique({ where: { email } });
+	if (existing) {
+		throw new ConflictError("Email already registered");
+	}
+
+	const passwordHash = await argon2.hash(password);
+
+	const result = await prisma.$transaction(async (tx) => {
+		const user = await tx.user.create({
+			data: { email, passwordHash, name },
 		});
 
-		// Generate workspace slug
-		const slugBase = (name || cleanEmail.split("@")[0])
-			.toLowerCase()
-			.replace(/[^a-z0-9]/g, "-")
-			.replace(/-+/g, "-")
-			.slice(0, 20);
-		const slug = `${slugBase}-${createdUser.id.slice(0, 6)}`;
-
-		// Create workspace with PARA collections
+		// Create default workspace
+		const slug = email.split("@")[0]!.replace(/[^a-z0-9]/gi, "-").toLowerCase();
 		const workspace = await tx.workspace.create({
 			data: {
-				name: "Personal",
-				slug,
+				name: `${name}'s Workspace`,
+				slug: `${slug}-${Date.now()}`,
+				createdById: user.id,
 				members: {
-					create: {
-						userId: createdUser.id,
-						role: "OWNER",
-					},
-				},
-				settings: {
-					create: {
-						prefs: {
-							onboardingStep: 1,
-							theme: "system",
-						},
-					},
+					create: { userId: user.id, role: "OWNER" },
 				},
 			},
 		});
 
-		// Seed PARA collections
-		await tx.collection.createMany({
-			data: [
-				{ workspaceId: workspace.id, title: "Projects", type: "PROJECT", description: "Active goals with deadlines" },
-				{ workspaceId: workspace.id, title: "Areas", type: "AREA", description: "Ongoing responsibilities" },
-				{ workspaceId: workspace.id, title: "Resources", type: "RESOURCE", description: "Reference material" },
-				{ workspaceId: workspace.id, title: "Archive", type: "ARCHIVE", description: "Completed and dormant items" },
-			],
-		});
-
-		// Create welcome note
-		await tx.node.create({
+		// Create default user settings
+		await tx.userSetting.create({
 			data: {
-				workspaceId: workspace.id,
-				title: "Welcome to HypeMind!",
-				type: "NOTE",
-				studioState: "ACTIVE",
-				contentHtml: `<h1>Welcome to HypeMind! 👋</h1>
-<p>HypeMind is your second brain — a place to capture, organize, and connect your thoughts.</p>
-<h2>Quick Start</h2>
-<ul>
-<li>Press <code>⌘N</code> to capture a new thought</li>
-<li>Use <strong>Projects</strong> for active goals with deadlines</li>
-<li>Use <strong>Areas</strong> for ongoing responsibilities</li>
-<li>Use <strong>Resources</strong> for reference material</li>
-</ul>
-<p>Feel free to delete this note once you're ready to begin!</p>`,
-				isPinned: true,
-				lastOpenedAt: new Date(),
+				userId: user.id,
+				prefs: {
+					themeMode: "system",
+					themePalette: "hype-default",
+					prefersReducedMotion: false,
+					density: "comfortable",
+					editorDefaultBlock: "paragraph",
+					hotkeys: {
+						quickCapture: "q",
+						openSearch: "k",
+						newJournal: "j",
+						newCanvas: "c",
+						toggleAssistant: ".",
+						toggleTheme: "t",
+						openInbox: "i",
+					},
+					experimental: {
+						vectorSearch: false,
+						graphLite: true,
+						aiInlineRewrite: false,
+					},
+				},
 			},
 		});
 
-		// Create today's journal
-		const today = new Date();
-		const journalTitle = today.toLocaleDateString("en-US", {
-			weekday: "long",
-			month: "long",
-			day: "numeric",
-			year: "numeric",
-		});
-
-		await tx.node.create({
-			data: {
-				workspaceId: workspace.id,
-				title: journalTitle,
-				type: "JOURNAL",
-				studioState: "ACTIVE",
-				metadata: { date: today.toISOString().split("T")[0] },
-				lastOpenedAt: new Date(),
-			},
-		});
-
-		return createdUser;
+		return { user, workspace };
 	});
 
+	// Create email verification token
+	const verifyToken = await createEmailVerificationToken(result.user.id);
+	const verifyUrl = `${CLIENT_URL}/verify-email?token=${encodeURIComponent(verifyToken)}`;
 
-	const rawToken = await createVerifyEmailToken(newUser.id);
-	sendVerificationEmailToken(newUser.email, rawToken)
+	// TODO: Send email via Resend (wire later)
+	// For now, log the URL in dev
+	if (NODE_ENV === "development") {
+		console.log(`[DEV] Email verification URL: ${verifyUrl}`);
+	}
 
 	return {
-		message: "Signup successful. Please verify your email.",
+		userId: result.user.id,
+		workspaceId: result.workspace.id,
+		devVerificationToken: NODE_ENV === "development" ? verifyToken : undefined,
 	};
-
 }
 
-
-
-
-export const verifyEmailService = async (rawToken: string, res: Response) => {
-	const tokenHash = crypto.createHmac("sha-256", EMAIL_SECRET).update(rawToken).digest("hex");
-
-	const tokenRecord = await prisma.emailVerification.findUnique({
-		where: { tokenHash }
-	})
-
-	if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
-		throw new ConflictError("Token is wrong , user was not able to verified .Try Again");
-
-
-	}
-	const updateUser = await prisma.user.update({ where: { id: tokenRecord.userId }, data: { emailVerified: true } });
-
-	// after the use delete the token 
-	await prisma.emailVerification.delete({
-		where: { tokenHash }
-	});
-
-
-
-	if (!updateUser) {
-		throw new NotFoundError("User was not found")
-	}
-
-	const accessToken = generateAccessToken(updateUser.id);
-	const refreshToken = await generateRefreshToken(updateUser.id);
-	setRefreshToken(res, refreshToken.raw, refreshToken.expiresAt)
-
-	// i reall did not understand why we are returning the update user here as in the db this has been completed
-	return {
-		updateUser: {
-			id: updateUser.id,
-			email: updateUser.email,
-			name: updateUser.email
-
-		},
-
-		accessToken
-
-	}
-
-}
-
-
-// login services 
-
-export const loginService = async (payload: { email: string, password: string }, res: Response) => {
-	if (!payload) {
-		throw new ForbiddenError("email and password is not there")
-	}
-
-	const { email, password } = payload;
-
-	/// normalise email 
-	const cleanEmail = email.trim().toLowerCase();
-
-
-	// user exit or not 
-
-	const exitingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
-
-	if (!exitingUser || !exitingUser.passwordHash) {
-		throw new BadRequestError(" Invalid credential ");
-
-	}
-
-	// isActive and deletedAt check 
-
-	if (!exitingUser.isActive || exitingUser.deletedAt) {
-		throw new ForbiddenError("Account disabled");
-	}
-
-
-	// password check 
-	const passwordCheck = await verifyPassword(password, exitingUser.passwordHash);
-
-
-	if (!passwordCheck) {
-		throw new BadRequestError("wrong Password");
-
-	}
-
-	if (!exitingUser.emailVerified) {
-		// should we send a email as we get the email is not verified
-		throw new ForbiddenError("Please verify your email before login")
-	}
-
-
-	const accessToken = generateAccessToken(exitingUser.id);
-	const refreshToken = await generateRefreshToken(exitingUser.id);
-	setRefreshToken(res, refreshToken.raw, refreshToken.expiresAt)
-
-	// does the user will be also be returned if yes then why and if not then why . 
-
-	return {
-		accessToken,
-		user: {
-			id: exitingUser.id,
-			email: exitingUser.email,
-			name: exitingUser.name,
-
-		},
-	};
-
-
-
-
-}
-
-
-
-
-export const refreshTokenServices = async (rawToken: string, res: Response) => {
-	const tokenVerify = await verifyRefreshToken(rawToken);
-	if (!tokenVerify) {
-		throw new ForbiddenError("Token invalid. Try again.");
-	}
-
+export async function login(email: string, password: string) {
 	const user = await prisma.user.findUnique({
-		where: { id: tokenVerify.userId },
+		where: { email },
+		select: {
+			id: true,
+			email: true,
+			name: true,
+			passwordHash: true,
+			emailVerified: true,
+			isActive: true,
+		},
 	});
 
-	if (!user || !user.isActive || user.deletedAt) {
-		throw new ForbiddenError("Account disabled");
+	if (!user || !user.passwordHash) {
+		throw new UnauthorizedError("Invalid email or password");
 	}
 
-	let newRefresh: { raw: string; expiresAt: Date };
+	if (!user.isActive) {
+		throw new UnauthorizedError("Account is deactivated");
+	}
 
-	await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-		await tx.refreshToken.delete({
-			where: { tokenHash: hmac(rawToken) },
-		});
+	const validPassword = await argon2.verify(user.passwordHash, password);
+	if (!validPassword) {
+		throw new UnauthorizedError("Invalid email or password");
+	}
 
-		newRefresh = await generateRefreshTokenTx(tx, user.id);
-
-		setRefreshToken(res, newRefresh.raw, newRefresh.expiresAt);
-	});
+	if (!user.emailVerified) {
+		throw new UnauthorizedError("Email not verified. Check your inbox.");
+	}
 
 	const accessToken = generateAccessToken(user.id);
+	const { raw: refreshTokenRaw, expiresAt } = await createRefreshToken(user.id);
+	const workspaceId = await getPrimaryWorkspaceId(user.id);
 
 	return {
 		accessToken,
-		user: { id: user.id, name: user.name, email: user.email },
+		refreshTokenRaw,
+		refreshExpiresAt: expiresAt,
+		user: { id: user.id, email: user.email, name: user.name ?? "", workspaceId },
 	};
-};
-
-
-
-export const logoutService = async (userId: string, res: Response) => {
-	await prisma.user.findUnique({ where: { id: userId } })
-	res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/v1/auth" })
-
-
-
 }
 
+export async function refreshTokens(rawRefreshToken: string) {
+	const tokenHash = hmacRefresh(rawRefreshToken);
 
+	const tokenRecord = await prisma.refreshToken.findUnique({
+		where: { tokenHash },
+	});
 
-
-export const forgotPasswordService = async (email: string) => {
-	const clean = email.trim().toLowerCase();
-	const user = await prisma.user.findUnique({ where: { email: clean } });
-
-	if (!user || !user.isActive || user.deletedAt) {
-
-		return { message: "If an account exists with that email, we sent password reset instructions." };
+	if (!tokenRecord) {
+		throw new UnauthorizedError("Invalid refresh token");
 	}
 
-	// rate limit check should be here (e.g., redis counter). Not shown.
-
-	// create token and send email
-	const rawToken = await createPasswordResetToken(user.id);
-	await sendPasswordResetEmail(rawToken, user.email);
-
-	return { message: "If an account exists with that email, we sent password reset instructions." };
-};
-
-
-
-
-
-export const resetPasswordService = async (
-	rawToken: string,
-	res: Response,
-	newPassword: string
-) => {
-	const tokenRecord = await verifyPasswordResetToken(rawToken);
-	if (!tokenRecord) throw new ForbiddenError("Invalid or expired token.");
-
-	// find user
-	const user = await prisma.user.findUnique({ where: { id: tokenRecord.userId } });
-	if (!user || !user.isActive || user.deletedAt) {
-		throw new ForbiddenError("Account disabled or not found.");
+	if (tokenRecord.revokedAt) {
+		// Potential reuse attack — revoke ALL tokens for this user
+		await prisma.refreshToken.updateMany({
+			where: { userId: tokenRecord.userId, revokedAt: null },
+			data: { revokedAt: new Date() },
+		});
+		throw new UnauthorizedError("Refresh token reuse detected — all sessions revoked");
 	}
 
-	// Optional: check emailVerified depending on your policy.
-	// If you require email verification to change passwords, keep that check.
-	// Otherwise, you may omit it.
+	if (tokenRecord.expiresAt < new Date()) {
+		throw new UnauthorizedError("Refresh token expired");
+	}
 
-	// Hash the new password
-	const newPasswordHash = await hash(newPassword);
+	// Revoke old token
+	await prisma.refreshToken.update({
+		where: { id: tokenRecord.id },
+		data: { revokedAt: new Date() },
+	});
 
-	// Use a transaction: update user password + delete token +
+	// Issue new pair
+	const accessToken = generateAccessToken(tokenRecord.userId);
+	const { raw: newRefreshRaw, expiresAt } = await createRefreshToken(tokenRecord.userId);
+	const user = await buildAuthUser(tokenRecord.userId);
+
+	return {
+		accessToken,
+		refreshTokenRaw: newRefreshRaw,
+		refreshExpiresAt: expiresAt,
+		userId: tokenRecord.userId,
+		user,
+	};
+}
+
+export async function logout(rawRefreshToken: string) {
+	const tokenHash = hmacRefresh(rawRefreshToken);
+
+	await prisma.refreshToken.updateMany({
+		where: { tokenHash, revokedAt: null },
+		data: { revokedAt: new Date() },
+	});
+}
+
+export async function verifyEmail(rawToken: string) {
+	const tokenHash = hmacEmail(rawToken);
+
+	const record = await prisma.emailVerification.findUnique({
+		where: { tokenHash },
+	});
+
+	if (!record) {
+		throw new BadRequestError("Invalid verification token");
+	}
+
+	if (record.usedAt) {
+		throw new BadRequestError("Verification link already used");
+	}
+
+	if (record.expiresAt < new Date()) {
+		throw new BadRequestError("Verification link expired");
+	}
+
 	await prisma.$transaction([
+		prisma.emailVerification.update({
+			where: { id: record.id },
+			data: { usedAt: new Date() },
+		}),
 		prisma.user.update({
-			where: { id: user.id },
-			data: {
-				passwordHash: newPasswordHash,
-				updatedAt: new Date(),
-			},
+			where: { id: record.userId },
+			data: { emailVerified: true },
 		}),
-		prisma.passwordResetToken.delete({
-			where: { tokenHash: tokenRecord.tokenHash },
-		}),
-		// revoke all refresh tokens to force re-login everywhere
-		prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
-		// clear the cookie
-		res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth/" })
 	]);
 
-	// Generate new tokens and set cookie
-	const accessToken = generateAccessToken(user.id);
-	const { raw, expiresAt } = await generateRefreshToken(user.id);
-	setRefreshToken(res, raw, expiresAt);
+	// Auto-login after verification: issue tokens
+	const accessToken = generateAccessToken(record.userId);
+	const { raw: refreshTokenRaw, expiresAt } = await createRefreshToken(record.userId);
+	const user = await buildAuthUser(record.userId);
 
 	return {
 		accessToken,
-		user: { id: user.id, name: user.name, email: user.email },
+		refreshTokenRaw,
+		refreshExpiresAt: expiresAt,
+		user,
 	};
+}
 
-};
+export async function getCurrentUser(userId: string) {
+	const user = await buildAuthUser(userId);
+	return { user };
+}
 
+export async function resendVerification(email: string) {
+	const user = await prisma.user.findUnique({
+		where: { email },
+		select: { id: true, emailVerified: true },
+	});
 
+	if (!user) {
+		// Don't reveal if email exists
+		return;
+	}
 
+	if (user.emailVerified) {
+		throw new BadRequestError("Email already verified");
+	}
+
+	// Check cooldown
+	const recent = await prisma.emailVerification.findFirst({
+		where: { userId: user.id },
+		orderBy: { createdAt: "desc" },
+	});
+
+	if (recent && Date.now() - recent.createdAt.getTime() < RESEND_COOLDOWN_MS) {
+		throw new BadRequestError("Please wait before requesting another verification email");
+	}
+
+	const verifyToken = await createEmailVerificationToken(user.id);
+	const verifyUrl = `${CLIENT_URL}/verify-email?token=${encodeURIComponent(verifyToken)}`;
+
+	// TODO: Send email via Resend
+	if (NODE_ENV === "development") {
+		console.log(`[DEV] Email verification URL: ${verifyUrl}`);
+	}
+}
+
+// ── Forgot Password ──────────────────────────────────
+
+export async function forgotPassword(email: string) {
+	const user = await prisma.user.findUnique({ where: { email } });
+
+	// Always succeed silently — no email enumeration
+	if (!user) return;
+
+	// Rate limit: 1 reset email per 5 minutes
+	const recent = await prisma.passwordResetToken.findFirst({
+		where: { userId: user.id },
+		orderBy: { createdAt: "desc" },
+	});
+
+	if (recent && Date.now() - recent.createdAt.getTime() < 5 * 60 * 1000) {
+		return; // Silently ignore — don't reveal timing
+	}
+
+	const raw = crypto.randomBytes(32).toString("hex");
+	const tokenHash = crypto.createHash("sha256").update(raw).digest("hex");
+
+	await prisma.passwordResetToken.create({
+		data: {
+			tokenHash,
+			userId: user.id,
+			expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+		},
+	});
+
+	const resetUrl = `${CLIENT_URL}/reset-password?token=${encodeURIComponent(raw)}`;
+
+	// TODO: Send email via Resend
+	if (NODE_ENV === "development") {
+		console.log(`[DEV] Password reset URL: ${resetUrl}`);
+	}
+}
+
+// ── Reset Password ────────────────────────────────────
+
+export async function resetPassword(rawToken: string, newPassword: string) {
+	const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+	const record = await prisma.passwordResetToken.findUnique({
+		where: { tokenHash },
+	});
+
+	if (!record) {
+		throw new BadRequestError("Invalid or expired reset token");
+	}
+
+	if (record.usedAt) {
+		throw new BadRequestError("This reset link has already been used");
+	}
+
+	if (record.expiresAt < new Date()) {
+		throw new BadRequestError("This reset link has expired");
+	}
+
+	const passwordHash = await argon2.hash(newPassword);
+
+	await prisma.$transaction([
+		prisma.passwordResetToken.update({
+			where: { id: record.id },
+			data: { usedAt: new Date() },
+		}),
+		prisma.user.update({
+			where: { id: record.userId },
+			data: { passwordHash },
+		}),
+		// Revoke all refresh tokens for security
+		prisma.refreshToken.updateMany({
+			where: { userId: record.userId, revokedAt: null },
+			data: { revokedAt: new Date() },
+		}),
+	]);
+}
 

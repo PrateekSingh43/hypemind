@@ -1,48 +1,57 @@
-// apps/api/src/middlewares/middleware.auth.ts
 import { type Request, type Response, type NextFunction } from "express";
-import { UnauthorizedError } from "../errors/httpErrors"; // Check this import path
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { JWT_SECRET } from "../config/env";
+import jwt from "jsonwebtoken";
 import { prisma } from "@repo/db";
-import { AuthenticatedRequest } from "../types/auth.types";
+import { JWT_SECRET } from "../config/env";
+import { UnauthorizedError } from "../errors/httpErrors";
+import type { AuthenticatedRequest } from "../types/auth.types";
 
-export async function authMiddleware(req: Request, _res: Response, next: NextFunction) {
-  try {
-    // 1. Check Header
-    const header = req.headers.authorization;
-    if (!header || !header.startsWith("Bearer")) {
-      throw new UnauthorizedError("Access Denied: No token provided");
-    }
+export const authMiddleware = async (
+	req: Request,
+	_res: Response,
+	next: NextFunction
+) => {
+	try {
+		const authHeader = req.headers.authorization;
+		if (!authHeader?.startsWith("Bearer ")) {
+			throw new UnauthorizedError("Missing or malformed authorization header");
+		}
 
-    // 2. Verify Token
-    const token = header.split(" ")[1];
-    let payload: JwtPayload & { userId: string };
+		const token = authHeader.slice(7);
+		const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
 
-    try {
-      payload = jwt.verify(token, JWT_SECRET) as JwtPayload & { userId: string };
-    } catch (error) {
-      throw new UnauthorizedError("Invalid Token");
-    }
+		const user = await prisma.user.findUnique({
+			where: { id: decoded.userId },
+			select: { id: true, email: true, name: true, emailVerified: true, isActive: true },
+		});
 
-    // 3. Check User in DB
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId }
-    });
+		if (!user) {
+			throw new UnauthorizedError("User not found");
+		}
 
-    if (!user || !user.isActive || user.deletedAt) {
-      throw new UnauthorizedError("User does not exist or is disabled");
-    }
+		if (!user.isActive) {
+			throw new UnauthorizedError("Account is deactivated");
+		}
 
-    // 4. Attach User & Next
-    (req as AuthenticatedRequest).user = { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name 
-    };
-    
-    next(); // <--- SUCCESS, Move to controller
+		if (!user.emailVerified) {
+			throw new UnauthorizedError("Email not verified");
+		}
 
-  } catch (error) {
-    next(error); // <--- CRITICAL FIX: Pass error to Express, don't crash Node
-  }
-}
+		(req as AuthenticatedRequest).user = {
+			id: user.id,
+			email: user.email,
+			name: user.name ?? "",
+		};
+
+		next();
+	} catch (err) {
+		if (err instanceof UnauthorizedError) {
+			next(err);
+		} else if (err instanceof jwt.JsonWebTokenError) {
+			next(new UnauthorizedError("Invalid token"));
+		} else if (err instanceof jwt.TokenExpiredError) {
+			next(new UnauthorizedError("Token expired"));
+		} else {
+			next(new UnauthorizedError("Authentication failed"));
+		}
+	}
+};

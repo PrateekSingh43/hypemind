@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./globals.css": "./src/globals.css",
+    "./styles/theme.css": "./styles/theme.css",
     "./lib/utils": "./src/lib/utils.ts",
     "./components/*": "./src/components/ui/*.tsx"
   },

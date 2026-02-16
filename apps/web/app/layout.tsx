@@ -1,21 +1,18 @@
 import "./globals.css";
-import { Providers } from "./provider";
 
-import { Geist, Newsreader } from "next/font/google";
+import { Inter } from "next/font/google";
+import type { Metadata } from "next";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-});
-
-
-
+export const metadata: Metadata = {
+  title: "HypeMind — Your Second Brain",
+  description: "Capture ideas, organize with PARA, and let your thoughts evolve.",
+};
 
 export default function RootLayout({
   children,
@@ -25,12 +22,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${newsreader.variable} antialiased bg-bg-app text-text-primary`}
+        className={`${inter.variable} antialiased`}
+        style={{
+          fontFamily: "var(--font-sans)",
+          backgroundColor: "var(--color-main)",
+          color: "var(--color-text)",
+        }}
         suppressHydrationWarning
       >
-
-        <Providers>{children}</Providers>
-
+        {children}
       </body>
     </html>
   );

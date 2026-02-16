@@ -1,145 +1,204 @@
-import  { type Response, type Request, type NextFunction } from "express"
+import { type Request, type Response } from "express";
+import { asyncHandler } from "../utils/asyncHandler";
+import * as authService from "./auth.service";
+import { REFRESH_COOKIE_NAME, NODE_ENV } from "../config/env";
+import { BadRequestError, UnauthorizedError } from "../errors/httpErrors";
+import type { AuthenticatedRequest } from "../types/auth.types";
 
-import { signupService, loginService, verifyEmailService, forgotPasswordService, refreshTokenServices, resetPasswordService, logoutService } from "./auth.service"
-import { asyncHandler } from "../utils/asyncHandler"
-import { BadRequestError, UnauthorizedError } from "../errors/httpErrors"
-import { REFRESH_COOKIE_NAME } from "../config/env"
-import { AuthenticatedRequest } from "../types/auth.types"
+const REFRESH_COOKIE_OPTIONS = {
+	httpOnly: true,
+	secure: NODE_ENV === "production",
+	sameSite: "lax" as const,
+	maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+	path: "/api/v1/auth",
+};
 
+export const registerController = asyncHandler(async (req: Request, res: Response) => {
+	const { email, password, name } = req.body;
 
-
-
-/* 
-  1. controller work is to get the email and  password fro the req.body then pass it to the singupServices
-
-*/
-
-export const signupController = asyncHandler(async (req: Request, res: Response, _next: NextFunction) => {
-
-
-	const result = await signupService(req.body)
-	if (result) {
-		res.status(201).json({
-			status: "successful",
-
-		})
+	if (
+		typeof email !== "string" ||
+		typeof password !== "string" ||
+		typeof name !== "string" ||
+		!email.trim() ||
+		!password ||
+		!name.trim()
+	) {
+		throw new BadRequestError("Email, password, and name are required");
 	}
 
-
-})
-
-
-export const verifyEmailController = asyncHandler(async (req: Request, res: Response, _next: NextFunction) => {
-
-	const { token } = req.body
-	if (!token) {
-		throw new UnauthorizedError("token invalid");
+	if (password.length < 8) {
+		throw new BadRequestError("Password must be at least 8 characters");
 	}
 
-	const { updateUser, accessToken } = await verifyEmailService(token, res)
+	const result = await authService.register(email.trim().toLowerCase(), password, name.trim());
 
+	res.status(201).json({
+		success: true,
+		message: "Account created. Check your email to verify.",
+		data: {
+			userId: result.userId,
+			workspaceId: result.workspaceId,
+			...(result.devVerificationToken ? { devVerificationToken: result.devVerificationToken } : {}),
+		},
+	});
+});
 
-	res.status(200).json({
-		message: "succefull",
-		updateUser,
-		accessToken
-	})
+export const loginController = asyncHandler(async (req: Request, res: Response) => {
+	const { email, password } = req.body;
 
-
-
-
-
-})
-
-export const loginController = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-
-	const { user, accessToken } = await loginService(req.body, res);
-
-	res.status(200).json({
-		message: "success",
-		user,
-		accessToken
-	})
-})
-
-
-export const refreshTokenController = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-	const token = req.cookies[REFRESH_COOKIE_NAME];
-
-	if (!token) throw new UnauthorizedError("Missing refresh token");
-
-	if (!token) {
-		throw new BadRequestError(
-			"token invalid"
-		)
+	if (
+		typeof email !== "string" ||
+		typeof password !== "string" ||
+		!email.trim() ||
+		!password
+	) {
+		throw new BadRequestError("Email and password are required");
 	}
 
-	const { user, accessToken } = await refreshTokenServices(token, res);
+	const result = await authService.login(email.trim().toLowerCase(), password);
 
-	res.status(200).json({
-		msg: "Successful",
-		user,
-		accessToken
-	})
-})
+	res.cookie(REFRESH_COOKIE_NAME, result.refreshTokenRaw, {
+		...REFRESH_COOKIE_OPTIONS,
+		maxAge: result.refreshExpiresAt.getTime() - Date.now(),
+	});
 
+	res.json({
+		success: true,
+		data: {
+			accessToken: result.accessToken,
+			user: result.user,
+		},
+	});
+});
 
-export const logoutController = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+export const refreshController = asyncHandler(async (req: Request, res: Response) => {
+	const rawRefreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
-
-	const userId = (req as AuthenticatedRequest).user.id;
-	if (!userId) throw new UnauthorizedError('Userid is not defined');
-	await logoutService(userId, res);
-
-
-	res.status(200).json({
-		msg: "Succefully logout"
-	})
-
-})
-
-// me route 
-
-export const meController = asyncHandler(async (req: Request, res: Response, _next: NextFunction) => {
-	const user = (req as AuthenticatedRequest).user;
-	return res.json({ user });
-})
-
-
-export const forgotPasswordController = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-
-	const email = req.body.email;
-
-	if (!email) {
-		throw new BadRequestError("email now found");
-
+	if (!rawRefreshToken) {
+		throw new UnauthorizedError("No refresh token");
 	}
 
-	await forgotPasswordService(email)
+	const result = await authService.refreshTokens(rawRefreshToken);
 
-	res.status(201).send("success")
-})
+	res.cookie(REFRESH_COOKIE_NAME, result.refreshTokenRaw, {
+		...REFRESH_COOKIE_OPTIONS,
+		maxAge: result.refreshExpiresAt.getTime() - Date.now(),
+	});
 
+	res.json({
+		success: true,
+		data: {
+			accessToken: result.accessToken,
+			user: result.user,
+		},
+	});
+});
 
+export const meController = asyncHandler(async (req: Request, res: Response) => {
+	const authReq = req as AuthenticatedRequest;
+	const result = await authService.getCurrentUser(authReq.user.id);
 
-export const resetPasswordController = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+	res.json({
+		success: true,
+		data: result,
+	});
+});
 
-	const { token, newPassword } = req.body;
+export const logoutController = asyncHandler(async (req: Request, res: Response) => {
+	const rawRefreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
-	const { user, accessToken } = await resetPasswordService(
-		token,
-		res,
-		newPassword
-	);
+	if (rawRefreshToken) {
+		await authService.logout(rawRefreshToken);
+	}
 
-	res.status(200).json({
-		msg: "success",
-		user,
-		res,
-		accessToken
-	})
-})
+	res.clearCookie(REFRESH_COOKIE_NAME, {
+		httpOnly: true,
+		secure: NODE_ENV === "production",
+		sameSite: "lax",
+		path: "/api/v1/auth",
+	});
 
+	res.json({ success: true, message: "Logged out" });
+});
 
+export const verifyEmailController = asyncHandler(async (req: Request, res: Response) => {
+	const { token } = req.body;
 
+	if (typeof token !== "string" || !token.trim()) {
+		throw new BadRequestError("Verification token is required");
+	}
+
+	const result = await authService.verifyEmail(token.trim());
+
+	res.cookie(REFRESH_COOKIE_NAME, result.refreshTokenRaw, {
+		...REFRESH_COOKIE_OPTIONS,
+		maxAge: result.refreshExpiresAt.getTime() - Date.now(),
+	});
+
+	res.json({
+		success: true,
+		message: "Email verified",
+		data: {
+			accessToken: result.accessToken,
+			user: result.user,
+		},
+	});
+});
+
+export const resendVerificationController = asyncHandler(async (req: Request, res: Response) => {
+	const { email } = req.body;
+
+	if (typeof email !== "string" || !email.trim()) {
+		throw new BadRequestError("Email is required");
+	}
+
+	await authService.resendVerification(email.trim().toLowerCase());
+
+	// Always return success to prevent email enumeration
+	res.json({
+		success: true,
+		message: "If the email exists and is unverified, a new verification link has been sent.",
+	});
+});
+
+export const forgotPasswordController = asyncHandler(async (req: Request, res: Response) => {
+	const { email } = req.body;
+
+	if (typeof email !== "string" || !email.trim()) {
+		throw new BadRequestError("Email is required");
+	}
+
+	await authService.forgotPassword(email.trim().toLowerCase());
+
+	// Always return success to prevent email enumeration
+	res.json({
+		success: true,
+		message: "If an account with that email exists, a password reset link has been sent.",
+	});
+});
+
+export const resetPasswordController = asyncHandler(async (req: Request, res: Response) => {
+	const { token, password } = req.body;
+
+	if (
+		typeof token !== "string" ||
+		typeof password !== "string" ||
+		!token.trim() ||
+		!password
+	) {
+		throw new BadRequestError("Token and new password are required");
+	}
+
+	if (password.length < 8) {
+		throw new BadRequestError("Password must be at least 8 characters");
+	}
+
+	await authService.resetPassword(token.trim(), password);
+
+	res.json({
+		success: true,
+		message: "Password has been reset. You can now sign in.",
+	});
+});
 

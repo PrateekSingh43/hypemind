@@ -1,22 +1,10 @@
-//C:\Users\prate\Hypemind\apps\api\src\middlewares\middleware.globalErrorHandler.ts
-import { ErrorRequestHandler } from "express";
+import type { ErrorRequestHandler } from "express";
 import { appError } from "../errors/appError";
 
-
-
-
-export const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
-
-
+export const globalErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 	if (err instanceof appError) {
-		return res.status(err.statusCode).json({ status: "error", success: false, message: err.message })
-
-	}
-	else{
-		return res.status(500).json({tatus: "error", success: false, message:"Internal server error"})
+		return res.status(err.statusCode).json({ message: err.message });
 	}
 
-
-	
-	
-}
+	return res.status(500).json({ message: "Internal server error" });
+};
