@@ -2,6 +2,7 @@ const API_BASE_URL =
 	process.env.NEXT_PUBLIC_API_BASE_URL ||
 	process.env.NEXT_PUBLIC_API_URL ||
 	"http://localhost:4000/api/v1";
+const REQUEST_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 3000);
 
 const ACCESS_TOKEN_KEY = "hm:access-token:v1";
 const WORKSPACE_ID_KEY = "hm:workspace-id:v1";
@@ -21,18 +22,26 @@ function readStorage(key: string) {
 	if (!canUseStorage()) {
 		return null;
 	}
-	return window.localStorage.getItem(key);
+	try {
+		return window.localStorage.getItem(key);
+	} catch {
+		return null;
+	}
 }
 
 function writeStorage(key: string, value: string | null) {
 	if (!canUseStorage()) {
 		return;
 	}
-	if (value === null) {
-		window.localStorage.removeItem(key);
-		return;
+	try {
+		if (value === null) {
+			window.localStorage.removeItem(key);
+			return;
+		}
+		window.localStorage.setItem(key, value);
+	} catch {
+		// Ignore storage write failures to keep app flow alive.
 	}
-	window.localStorage.setItem(key, value);
 }
 
 function resolveEndpoint(endpoint: string) {
@@ -47,6 +56,12 @@ async function request<T>(
 ): Promise<T> {
 	const headers = new Headers(init?.headers);
 	const token = getAccessToken();
+	const controller = new AbortController();
+	const timeoutMs =
+		Number.isFinite(REQUEST_TIMEOUT_MS) && REQUEST_TIMEOUT_MS > 0
+			? REQUEST_TIMEOUT_MS
+			: 3000;
+	const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
 
 	if ((init?.requiresAuth ?? true) && token && !headers.has("Authorization")) {
 		headers.set("Authorization", `Bearer ${token}`);
@@ -56,13 +71,25 @@ async function request<T>(
 		headers.set("Content-Type", "application/json");
 	}
 
-	const res = await fetch(`${API_BASE_URL}${resolveEndpoint(endpoint)}`, {
-		...init,
-		method,
-		credentials: "include",
-		headers,
-		body: body === undefined ? init?.body : JSON.stringify(body),
-	});
+	let res: Response;
+	try {
+		res = await fetch(`${API_BASE_URL}${resolveEndpoint(endpoint)}`, {
+			...init,
+			method,
+			credentials: "include",
+			headers,
+			signal: controller.signal,
+			body: body === undefined ? init?.body : JSON.stringify(body),
+		});
+	} catch (error) {
+		const isAbortError = error instanceof Error && error.name === "AbortError";
+		if (isAbortError) {
+			throw new Error(`Request timed out after ${timeoutMs}ms`);
+		}
+		throw new Error("Network error while contacting API");
+	} finally {
+		globalThis.clearTimeout(timeout);
+	}
 
 	const contentType = res.headers.get("content-type") ?? "";
 	const responsePayload = contentType.includes("application/json")

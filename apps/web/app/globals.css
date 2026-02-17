@@ -30,13 +30,13 @@
 
 	.dark,
 	[data-theme="dark"] {
-		--background: 240 6% 7%;
-		--surface: 240 5% 10%;
-		--muted: 240 5% 14%;
-		--foreground: 0 0% 96%;
-		--card: var(--surface);
+		--background: 240 10% 3.9%;
+		--surface: 240 10% 3.9%;
+		--muted: 240 3.7% 15.9%;
+		--foreground: 0 0% 98%;
+		--card: 240 10% 3.9%;
 		--card-foreground: var(--foreground);
-		--popover: var(--surface);
+		--popover: 240 10% 3.9%;
 		--popover-foreground: var(--foreground);
 		--primary: 252 89% 66%;
 		--primary-foreground: 0 0% 100%;
@@ -47,7 +47,7 @@
 		--accent-foreground: var(--foreground);
 		--destructive: 0 62% 52%;
 		--destructive-foreground: 0 0% 100%;
-		--border: 240 4% 20%;
+		--border: 240 3.7% 15.9%;
 		--input: var(--muted);
 		--input-background: var(--muted);
 		--ring: 252 89% 66%;
