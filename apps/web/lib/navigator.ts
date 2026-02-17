@@ -1,6 +1,6 @@
 export const Navigator = {
 	dashboard: () => "/dashboard",
-	inbox: () => "/dashboard/inbox",
+	unsorted: () => "/dashboard/unsorted",
 	pinned: () => "/dashboard/pinned",
 	journal: () => "/dashboard/journal",
 	areas: () => "/dashboard/area",

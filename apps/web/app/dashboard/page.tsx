@@ -1,58 +1,99 @@
 "use client";
 
-import { ArrowRight, FileText, FolderKanban, Layers } from "lucide-react";
-import { MetricCard } from "../../components/dashboard/metric-card";
-import { ProjectCard } from "../../components/dashboard/project-card";
-import { RecentlyUpdatedCard } from "../../components/dashboard/recently-updated-card";
+import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight, FileText, FolderKanban, Layout, Pin } from "lucide-react";
+import { Navigator } from "../../lib/navigator";
+
+const JUMP_BACK_IN = [
+	{ id: "jump-1", title: "Product Direction Canvas", subtitle: "Edited 42 minutes ago", icon: Layout },
+	{ id: "jump-2", title: "Quick Note: API edge cases", subtitle: "Opened 1 hour ago", icon: FileText },
+	{ id: "jump-3", title: "Project: HypeMind Dashboard", subtitle: "Viewed yesterday", icon: FolderKanban },
+];
+
+const PINNED_ITEMS = [
+	{ id: "pin-1", title: "Q3 OKRs", subtitle: "Strategic planning" },
+	{ id: "pin-2", title: "Moving Checklist", subtitle: "Personal operations" },
+];
 
 export default function DashboardOverview() {
-	const recentlyUpdated = [
-		{ id: "1", title: "HypeMind Architecture", timestamp: "1 hour ago" },
-		{ id: "2", title: "Landing Page Redesign", timestamp: "3 hours ago" },
-		{ id: "3", title: "Q3 OKRs & Planning", timestamp: "5 hours ago" },
-	];
+	const [captureInput, setCaptureInput] = useState("");
+	const [unsortedCount, setUnsortedCount] = useState(3);
+	const [captureMessage, setCaptureMessage] = useState<string | null>(null);
 
-	const activeProjects = [
-		{ id: "1", title: "HypeMind Dashboard", category: "Product Development", description: "Core UI application interface implementation.", canvasCount: 5, lastUpdated: "2 hours ago", status: "Active" as const },
-		{ id: "2", title: "AI Assistant Core", category: "Product Development", description: "Document parsing and LLM orchestration.", canvasCount: 3, lastUpdated: "1 day ago", status: "Active" as const },
-		{ id: "3", title: "Landing Page", category: "Marketing", description: "Conversion optimized landing layout.", canvasCount: 2, lastUpdated: "3 days ago", status: "Active" as const },
-		{ id: "4", title: "Brand Assets v2", category: "Design", description: "Updated typography and token scales.", canvasCount: 8, lastUpdated: "1 week ago", status: "Inactive" as const },
-	];
+	const submitCapture = () => {
+		const value = captureInput.trim();
+		if (!value) {
+			return;
+		}
+
+		setCaptureInput("");
+		setUnsortedCount((current) => current + 1);
+		setCaptureMessage(`Captured to Unsorted: "${value}"`);
+	};
 
 	return (
-		<div className="mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
-			<div className="mb-8">
-				<h1 className="mb-1 text-2xl font-bold tracking-tight text-foreground">Overview</h1>
-				<p className="text-sm text-muted-foreground">System telemetry and active contexts.</p>
-			</div>
+		<div className="mx-auto w-full max-w-4xl p-8 md:p-12">
+			<div className="space-y-14">
+				<section>
+					<div className="rounded-lg bg-muted/30 p-4 focus-within:ring-1 focus-within:ring-primary/40">
+						<input
+							type="text"
+							value={captureInput}
+							onChange={(event) => setCaptureInput(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault();
+									submitCapture();
+								}
+							}}
+							placeholder="Capture a thought..."
+							className="w-full bg-transparent text-lg outline-none placeholder:text-muted-foreground/75"
+						/>
+					</div>
+					{captureMessage && <p className="mt-3 text-sm text-muted-foreground">{captureMessage}</p>}
+				</section>
 
-			<div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-				<MetricCard icon={FolderKanban} label="Total Projects" value={4} iconBgColor="#6F5DF5" />
-				<MetricCard icon={Layers} label="Active Areas" value={2} iconBgColor="#23C58A" />
-				<MetricCard icon={FileText} label="Stored Items" value={28} iconBgColor="#F59E0B" />
-			</div>
+				<section>
+					<h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jump Back In</h2>
+					<div className="space-y-1">
+						{JUMP_BACK_IN.map((item) => (
+							<button key={item.id} type="button" className="group flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:text-foreground">
+								<item.icon className="size-4 text-muted-foreground transition-all duration-200 group-hover:scale-110 group-hover:text-primary" />
+								<div className="min-w-0">
+									<p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+									<p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+								</div>
+							</button>
+						))}
+					</div>
+				</section>
 
-			<div className="mb-10">
-				<h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-foreground">Recently Updated</h2>
-				<div className="scrollbar-hide flex gap-3 overflow-x-auto pb-4 sm:gap-4">
-					{recentlyUpdated.map((item) => (
-						<RecentlyUpdatedCard key={item.id} title={item.title} timestamp={item.timestamp} />
-					))}
-				</div>
-			</div>
+				<section>
+					<h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Focus</h2>
+					<div className="space-y-1">
+						{PINNED_ITEMS.map((item) => (
+							<button key={item.id} type="button" className="group flex w-full items-center gap-3 rounded-lg bg-muted/20 px-3 py-3 text-left transition-colors hover:bg-muted/30">
+								<Pin className="size-4 text-muted-foreground transition-all duration-200 group-hover:scale-110 group-hover:text-primary" />
+								<div>
+									<p className="text-sm font-medium text-foreground">{item.title}</p>
+									<p className="text-xs text-muted-foreground">{item.subtitle}</p>
+								</div>
+							</button>
+						))}
+					</div>
+				</section>
 
-			<div>
-				<div className="mb-4 flex items-center justify-between gap-3">
-					<h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">Active Projects</h2>
-					<button type="button" className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-primary transition-colors hover:text-primary/80">
-						View all <ArrowRight className="size-3.5" />
-					</button>
-				</div>
-				<div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-					{activeProjects.map((project) => (
-						<ProjectCard key={project.id} {...project} />
-					))}
-				</div>
+				<section className="rounded-2xl bg-primary/5 p-6">
+					<h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-foreground/80">Cognitive Hygiene</h2>
+					<p className="text-sm text-foreground/90">You have {unsortedCount} raw notes waiting to be organized.</p>
+					<Link
+						href={Navigator.unsorted()}
+						className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:underline"
+					>
+						Process Now <ArrowRight className="size-3.5" />
+					</Link>
+				</section>
 			</div>
 		</div>
 	);
