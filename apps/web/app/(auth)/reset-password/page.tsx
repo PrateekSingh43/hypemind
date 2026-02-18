@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
@@ -8,7 +8,7 @@ import { Eye, EyeOff, Loader2, CheckCircle2, XCircle, ArrowLeft } from "lucide-r
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api/v1";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const token = searchParams.get("token");
@@ -164,10 +164,10 @@ export default function ResetPasswordPage() {
 							<div className="flex-1 h-1 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
 								<div
 									className={`h-full rounded-full transition-all ${password.length >= 12
-											? "w-full bg-emerald-500"
-											: password.length >= 8
-												? "w-2/3 bg-amber-500"
-												: "w-1/3 bg-red-500"
+										? "w-full bg-emerald-500"
+										: password.length >= 8
+											? "w-2/3 bg-amber-500"
+											: "w-1/3 bg-red-500"
 										}`}
 								/>
 							</div>
@@ -214,5 +214,13 @@ export default function ResetPasswordPage() {
 				</button>
 			</form>
 		</div>
+	);
+}
+
+export default function ResetPasswordPage() {
+	return (
+		<Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="animate-spin h-6 w-6" /></div>}>
+			<ResetPasswordContent />
+		</Suspense>
 	);
 }

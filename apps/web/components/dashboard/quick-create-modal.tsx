@@ -89,7 +89,7 @@ export function QuickCreateModal() {
 	}
 
 	return (
-		<div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setIsOpen(false)}>
+		<div className="fixed inset-0 z-100 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setIsOpen(false)}>
 			<div className="w-full max-w-lg rounded-2xl bg-card p-5 shadow-2xl ring-1 ring-border/70" onClick={(event) => event.stopPropagation()}>
 				<div className="flex items-center justify-between border-b border-border p-4">
 					<div>

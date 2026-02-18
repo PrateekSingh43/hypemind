@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
@@ -12,7 +12,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/
 
 type Status = "verifying" | "success" | "error" | "no-token";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const token = searchParams.get("token");
@@ -194,5 +194,13 @@ export default function VerifyEmailPage() {
 				</motion.div>
 			)}
 		</div>
+	);
+}
+
+export default function VerifyEmailPage() {
+	return (
+		<Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="animate-spin h-6 w-6" /></div>}>
+			<VerifyEmailContent />
+		</Suspense>
 	);
 }
