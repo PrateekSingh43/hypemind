@@ -333,7 +333,7 @@ model VectorEmbedding {
   itemId     String
   chunkIndex Int
 
-  embedding Unsupported("vector(1536)")
+  embedding Unsupported("vector(1024)")
 
   model String @default("voyage-4")
 

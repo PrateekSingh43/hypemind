@@ -1,44 +1,75 @@
+import "dotenv/config";
+import { VoyageAIClient } from "voyageai";
 import { prisma } from "@repo/db";
 
-async function verifyVectorOperations() {
-  const testWorkspaceId = "test-workspace-" + Date.now();
-  const testItemId = "test-item-" + Date.now();
-  const testVectorId = "test-vector-" + Date.now();
-  
-  const vectorArray = Array(1536).fill(0.01);
-  const vectorString = `[${vectorArray.join(',')}]`;
+async function executeRAGRetrieval() {
+  const client = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY });
+  const textPayload = "PostgreSQL is a highly stable, open-source relational database.";
+  const query = "Tell me about SQL databases.";
 
-  await prisma.workspace.create({
-    data: {
-      id: testWorkspaceId,
-      name: "Test Workspace",
-      slug: "test-workspace-" + Date.now()
-    }
+  // 1. Generate Embeddings
+  const [docEmbed, queryEmbed] = await Promise.all([
+    client.embed({ input: [textPayload], model: "voyage-4" }),
+    client.embed({ input: [query], model: "voyage-4" })
+  ]);
+
+  const docVectorStr = `[${(docEmbed.data?.[0]?.embedding ?? []).join(',')}]`;
+  const queryVectorStr = `[${(queryEmbed.data?.[0]?.embedding ?? []).join(',')}]`;
+
+
+  
+  const workspaceId = "rag-workspace";
+  const itemId = "rag-item-" + Date.now();
+
+  await prisma.workspace.upsert({
+    where: { slug: workspaceId },
+    update: {},
+    create: { id: workspaceId, name: "RAG Workspace", slug: workspaceId }
   });
 
   await prisma.item.create({
     data: {
-      id: testItemId,
-      workspaceId: testWorkspaceId,
-      type: "PAGE"
+      id: itemId,
+      workspaceId,
+      type: "PAGE",
+      title: "Database Documentation",
+      contentJson: { text: textPayload } // Storing the raw data
     }
   });
 
+  const vectorId = `vec-${Date.now()}`;
   await prisma.$executeRaw`
-    INSERT INTO "VectorEmbedding" (id, "itemId", "chunkIndex", embedding, status)
-    VALUES (${testVectorId}, ${testItemId}, 0, ${vectorString}::vector, 'READY'::"EmbeddingState")
+    INSERT INTO "VectorEmbedding" (id, "itemId", "chunkIndex", embedding, model, status)
+    VALUES (${vectorId}, ${itemId}, 0, ${docVectorStr}::vector, 'voyage-4', 'READY'::"EmbeddingState")
   `;
 
-  const result = await prisma.$queryRaw`
-    SELECT id, "itemId", embedding::text FROM "VectorEmbedding" 
-    WHERE id = ${testVectorId}
+  // 3. Retrieve Foreign Key via Vector Similarity
+  const vectorMatches: any[] = await prisma.$queryRaw`
+    SELECT "itemId", 1 - (embedding <=> ${queryVectorStr}::vector) AS similarity
+    FROM "VectorEmbedding"
+    ORDER BY embedding <=> ${queryVectorStr}::vector
+    LIMIT 1
   `;
 
-  console.log(result);
+  const match = vectorMatches[0];
 
-  await prisma.workspace.delete({
-    where: { id: testWorkspaceId }
+  // 4. Retrieve Original Data via Foreign Key
+  const retrievedItem = await prisma.item.findUnique({
+    where: { id: match.itemId },
+    select: {
+      title: true,
+      contentJson: true
+    }
   });
+
+  console.log("--- DATABASE RETRIEVAL OUTPUT ---");
+  console.log(`Query: ${query}`);
+  console.log(`Vector Match Similarity: ${match.similarity.toFixed(4)}`);
+  console.log(`Retrieved Document Title: ${retrievedItem?.title}`);
+  
+  // Extracting the exact string payload saved to the database
+  const parsedContent = retrievedItem?.contentJson as { text: string };
+  console.log(`Retrieved Data Payload: "${parsedContent.text}"`);
 }
 
-verifyVectorOperations().catch(console.error);
+executeRAGRetrieval().catch(console.error);
