@@ -8,6 +8,7 @@ import { Prisma, prisma } from '@repo/db';
 
 
 
+
 export const hmac = (raw: string) => {
 	return crypto.createHmac("sha-256", REFRESH_SECRET).update(raw).digest("hex");
 }
@@ -15,15 +16,18 @@ export const hmac = (raw: string) => {
 
 export const generateAccessToken = (userId: string) => {
 	return jwt.sign({ userId }, JWT_SECRET, {
-		expiresIn: "15m",
-		jwtid: crypto.randomUUID()
+		algorithm: 'HS256',            // 2. Explicitly define algorithm
+		expiresIn: '15m',
+		audience: 'my-app-api',        // 3. aud: Who this token is for
+		issuer: 'my-auth-service',     // 4. iss: Who issued the token
+		jwtid: crypto.randomUUID(),
 	})
 
 }
 
 export const generateRefreshToken = async (userId: string) => {
 	const random = crypto.randomBytes(48).toString("hex");
-	const raw = `${userId}. ${random}`;
+	const raw = `${userId}.${random}`;
 
 	const tokenHash = hmac(raw);
 	const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -36,20 +40,20 @@ export const generateRefreshToken = async (userId: string) => {
 }
 
 export const generateRefreshTokenTx = async (
-  tx: Prisma.TransactionClient,
-  userId: string
+	tx: Prisma.TransactionClient,
+	userId: string
 ) => {
-  const random = crypto.randomBytes(48).toString("hex");
-  const raw = `${userId}.${random}`;
+	const random = crypto.randomBytes(48).toString("hex");
+	const raw = `${userId}.${random}`;
 
-  const tokenHash = hmac(raw);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+	const tokenHash = hmac(raw);
+	const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-  await tx.refreshToken.create({
-    data: { tokenHash, userId, expiresAt },
-  });
+	await tx.refreshToken.create({
+		data: { tokenHash, userId, expiresAt },
+	});
 
-  return { raw, expiresAt };
+	return { raw, expiresAt };
 };
 
 

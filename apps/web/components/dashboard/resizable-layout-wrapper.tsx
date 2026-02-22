@@ -1,283 +1,323 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsLeft } from "lucide-react";
-import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "@repo/ui/components/resizable";
+import { GripVertical, Sparkles } from "lucide-react";
 import { LeftSidebar } from "./left-sidebar";
-import { QuickCreateModal } from "./quick-create-modal";
+
 import { RightSidebar } from "./right-sidebar";
 
-const PANEL_LAYOUT_COOKIE = "react-resizable-panels-layout";
-const LEGACY_PANEL_LAYOUT_COOKIE = "react-resizable-panels:layout";
-const LEFT_COLLAPSED_KEY = "hm:dashboard:left-collapsed:v1";
-const RIGHT_COLLAPSED_KEY = "hm:dashboard:right-collapsed:v1";
-const LEFT_COLLAPSE_THRESHOLD_PX = 72;
-const LEFT_EXPAND_THRESHOLD_PX = 88;
-const RIGHT_COLLAPSE_THRESHOLD_PX = 24;
-const RIGHT_EXPAND_THRESHOLD_PX = 72;
+// ── Storage keys ──────────────────────────────────────────────────────────────
+const LEFT_WIDTH_KEY = "hm:dashboard:left-width:v2";
+const RIGHT_WIDTH_KEY = "hm:dashboard:right-width:v2";
+const LEFT_COLLAPSED_KEY = "hm:dashboard:left-collapsed:v2";
+const RIGHT_COLLAPSED_KEY = "hm:dashboard:right-collapsed:v2";
 
-type ResizableLayoutWrapperProps = {
-	children: React.ReactNode;
-	defaultLayout: [number, number, number];
-};
+// ── Constraints ───────────────────────────────────────────────────────────────
+const LEFT_MIN = 180;
+const LEFT_MAX = 280;
+const LEFT_COLLAPSED_WIDTH = 60;
+const LEFT_COLLAPSE_THRESHOLD = 120;
 
-type PanelRefHandle = {
-	collapse: () => void;
-	expand: () => void;
-	getSize: () => { asPercentage: number; inPixels: number };
-	isCollapsed: () => boolean;
-	resize: (size: number | string) => void;
-};
+const RIGHT_MIN = 280;
+const RIGHT_MAX = 597;
+const RIGHT_COLLAPSE_THRESHOLD = 180;
 
-type PanelResizePayload = {
-	inPixels: number;
-};
+const DEFAULT_LEFT_WIDTH = 240;
+const DEFAULT_RIGHT_WIDTH = 320;
 
-function safeReadLocalStorage(key: string): string | null {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function readStorageNumber(key: string, fallback: number): number {
 	try {
-		return window.localStorage.getItem(key);
+		const val = window.localStorage.getItem(key);
+		if (val === null) return fallback;
+		const num = Number(val);
+		return Number.isFinite(num) ? num : fallback;
 	} catch {
-		return null;
+		return fallback;
 	}
 }
 
-function safeWriteLocalStorage(key: string, value: string) {
+function readStorageBool(key: string, fallback: boolean): boolean {
+	try {
+		const val = window.localStorage.getItem(key);
+		if (val === null) return fallback;
+		return val === "1";
+	} catch {
+		return fallback;
+	}
+}
+
+function writeStorage(key: string, value: string) {
 	try {
 		window.localStorage.setItem(key, value);
 	} catch {
-		// Ignore storage write failures so the UI remains interactive.
+		// Ignore write failures.
 	}
 }
 
-function safeWriteCookie(layout: [number, number, number]) {
-	const encoded = encodeURIComponent(JSON.stringify(layout));
+// ── Edge Drag Handle ──────────────────────────────────────────────────────────
+// Absolutely positioned to overlap the sidebar's own border edge.
+// The hover line replaces/highlights the sidebar border rather than creating a second line.
+function EdgeDragHandle({
+	side,
+	onDragStart,
+}: {
+	side: "left" | "right";
+	onDragStart: (e: React.MouseEvent) => void;
+}) {
+	const isLeft = side === "left";
 
-	try {
-		document.cookie = `${PANEL_LAYOUT_COOKIE}=${encoded}; Path=/; Max-Age=31536000; SameSite=Lax`;
-		// Backward compatibility for any existing reader expecting legacy key.
-		document.cookie = `${LEGACY_PANEL_LAYOUT_COOKIE}=${encoded}; Path=/; Max-Age=31536000; SameSite=Lax`;
-	} catch {
-		// Ignore cookie write failures.
-	}
+	return (
+		<div
+			role="separator"
+			aria-orientation="vertical"
+			className="group/edge absolute top-0 bottom-0 z-20 flex cursor-col-resize items-center justify-center"
+			style={{
+				width: 12,
+				// Overlap the sidebar border: for left sidebar, the border-right is at `right: 0`.
+				// We center the 12px hit zone on that border.
+				...(isLeft ? { right: -6 } : { left: -6 }),
+			}}
+			onMouseDown={onDragStart}
+		>
+			{/* 2px highlight line — sits exactly on the sidebar's border edge on hover */}
+			<div
+				className="absolute top-0 bottom-0 w-0.5 bg-transparent transition-colors duration-150 group-hover/edge:bg-border"
+				style={{ left: 5 }}
+			/>
+
+			{/* Grip icon — fades in on hover, centered vertically */}
+			<div className="z-10 flex h-7 w-4 items-center justify-center rounded-sm opacity-0 transition-opacity duration-150 group-hover/edge:opacity-100">
+				<GripVertical className="h-5 w-5 text-muted-foreground/60" />
+			</div>
+		</div>
+	);
 }
+
+// ── Main Component ────────────────────────────────────────────────────────────
+type ResizableLayoutWrapperProps = {
+	children: React.ReactNode;
+	defaultLeftWidth?: number;
+	defaultRightWidth?: number;
+};
 
 export function ResizableLayoutWrapper({
 	children,
-	defaultLayout,
+	defaultLeftWidth = DEFAULT_LEFT_WIDTH,
+	defaultRightWidth = DEFAULT_RIGHT_WIDTH,
 }: ResizableLayoutWrapperProps) {
-	const leftPanelRef = React.useRef<PanelRefHandle | null>(null);
-	const rightPanelRef = React.useRef<PanelRefHandle | null>(null);
-
+	const [leftWidth, setLeftWidth] = React.useState(defaultLeftWidth);
+	const [rightWidth, setRightWidth] = React.useState(defaultRightWidth);
 	const [leftCollapsed, setLeftCollapsed] = React.useState(false);
-	const [rightCollapsed, setRightCollapsed] = React.useState(false);
-	const [layoutRestored, setLayoutRestored] = React.useState(false);
+	const [rightCollapsed, setRightCollapsed] = React.useState(true);
+	const [mounted, setMounted] = React.useState(false);
+
+	// Track dragging for cursor style on <body>
+	const draggingRef = React.useRef<"left" | "right" | null>(null);
+	// Track the pre-collapse width so we restore to it
+	const savedRightWidthRef = React.useRef(defaultRightWidth);
+
+	// ── Restore from localStorage on mount ──────────────────────────────────
+	React.useEffect(() => {
+		const storedLeft = readStorageNumber(LEFT_WIDTH_KEY, defaultLeftWidth);
+		const storedRight = readStorageNumber(RIGHT_WIDTH_KEY, defaultRightWidth);
+		const storedLeftCollapsed = readStorageBool(LEFT_COLLAPSED_KEY, false);
+		const storedRightCollapsed = readStorageBool(RIGHT_COLLAPSED_KEY, true);
+
+		setLeftWidth(storedLeftCollapsed ? LEFT_COLLAPSED_WIDTH : storedLeft);
+		setRightWidth(storedRightCollapsed ? 0 : storedRight);
+		setLeftCollapsed(storedLeftCollapsed);
+		setRightCollapsed(storedRightCollapsed);
+		savedRightWidthRef.current = storedRight;
+		setMounted(true);
+	}, [defaultLeftWidth, defaultRightWidth]);
+
+	// ── Persist to localStorage ─────────────────────────────────────────────
+	React.useEffect(() => {
+		if (!mounted) return;
+		writeStorage(LEFT_WIDTH_KEY, String(leftCollapsed ? DEFAULT_LEFT_WIDTH : leftWidth));
+		writeStorage(LEFT_COLLAPSED_KEY, leftCollapsed ? "1" : "0");
+	}, [leftWidth, leftCollapsed, mounted]);
 
 	React.useEffect(() => {
-		const restore = () => {
-			const leftStored = safeReadLocalStorage(LEFT_COLLAPSED_KEY) === "1";
-			const rightStored = safeReadLocalStorage(RIGHT_COLLAPSED_KEY) === "1";
+		if (!mounted) return;
+		writeStorage(RIGHT_WIDTH_KEY, String(rightCollapsed ? savedRightWidthRef.current : rightWidth));
+		writeStorage(RIGHT_COLLAPSED_KEY, rightCollapsed ? "1" : "0");
+	}, [rightWidth, rightCollapsed, mounted]);
 
-			if (leftStored) {
-				leftPanelRef.current?.collapse();
-			} else {
-				leftPanelRef.current?.expand();
-			}
+	// ── Drag logic ──────────────────────────────────────────────────────────
+	const startDrag = React.useCallback(
+		(side: "left" | "right", e: React.MouseEvent) => {
+			e.preventDefault();
+			draggingRef.current = side;
 
-			if (rightStored) {
-				rightPanelRef.current?.collapse();
-			} else {
-				rightPanelRef.current?.expand();
-			}
+			const startX = e.clientX;
+			const startWidth = side === "left"
+				? (leftCollapsed ? LEFT_COLLAPSED_WIDTH : leftWidth)
+				: (rightCollapsed ? 0 : rightWidth);
 
-			setLeftCollapsed(leftStored);
-			setRightCollapsed(rightStored);
-			setLayoutRestored(true);
-		};
+			// Add cursor to body while dragging to prevent flicker
+			document.body.style.cursor = "col-resize";
+			document.body.style.userSelect = "none";
 
-		const frame = window.requestAnimationFrame(restore);
-		return () => window.cancelAnimationFrame(frame);
-	}, []);
+			const onMouseMove = (ev: MouseEvent) => {
+				const delta = ev.clientX - startX;
 
-	React.useEffect(() => {
-		if (!layoutRestored) {
-			return;
-		}
-		safeWriteLocalStorage(LEFT_COLLAPSED_KEY, leftCollapsed ? "1" : "0");
-	}, [leftCollapsed, layoutRestored]);
+				if (side === "left") {
+					const newWidth = startWidth + delta;
 
-	React.useEffect(() => {
-		if (!layoutRestored) {
-			return;
-		}
-		safeWriteLocalStorage(RIGHT_COLLAPSED_KEY, rightCollapsed ? "1" : "0");
-	}, [rightCollapsed, layoutRestored]);
+					// Auto-collapse when dragged below threshold
+					if (newWidth < LEFT_COLLAPSE_THRESHOLD) {
+						setLeftWidth(LEFT_COLLAPSED_WIDTH);
+						setLeftCollapsed(true);
+						return;
+					}
 
+					// Clamp to valid range
+					const clamped = Math.max(LEFT_MIN, Math.min(LEFT_MAX, newWidth));
+					setLeftWidth(clamped);
+					setLeftCollapsed(false);
+				} else {
+					// Right panel: dragging left = larger, dragging right = smaller
+					const newWidth = startWidth - delta;
+
+					// Auto-collapse
+					if (newWidth < RIGHT_COLLAPSE_THRESHOLD) {
+						setRightWidth(0);
+						setRightCollapsed(true);
+						return;
+					}
+
+					const clamped = Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, newWidth));
+					setRightWidth(clamped);
+					setRightCollapsed(false);
+					savedRightWidthRef.current = clamped;
+				}
+			};
+
+			const onMouseUp = () => {
+				draggingRef.current = null;
+				document.body.style.cursor = "";
+				document.body.style.userSelect = "";
+				document.removeEventListener("mousemove", onMouseMove);
+				document.removeEventListener("mouseup", onMouseUp);
+			};
+
+			document.addEventListener("mousemove", onMouseMove);
+			document.addEventListener("mouseup", onMouseUp);
+		},
+		[leftWidth, rightWidth, leftCollapsed, rightCollapsed]
+	);
+
+	// ── Toggle callbacks ────────────────────────────────────────────────────
 	const toggleLeftSidebar = React.useCallback(() => {
-		const panel = leftPanelRef.current;
-		if (!panel) {
-			return;
-		}
-
-		if (panel.isCollapsed()) {
-			panel.expand();
+		if (leftCollapsed) {
+			const restored = readStorageNumber(LEFT_WIDTH_KEY, DEFAULT_LEFT_WIDTH);
+			setLeftWidth(Math.max(LEFT_MIN, Math.min(LEFT_MAX, restored)));
 			setLeftCollapsed(false);
-			return;
+		} else {
+			setLeftWidth(LEFT_COLLAPSED_WIDTH);
+			setLeftCollapsed(true);
 		}
-
-		panel.collapse();
-		setLeftCollapsed(true);
-	}, []);
+	}, [leftCollapsed]);
 
 	const toggleRightSidebar = React.useCallback(() => {
-		const panel = rightPanelRef.current;
-		if (!panel) {
-			return;
-		}
-
-		if (panel.isCollapsed()) {
-			panel.expand();
+		if (rightCollapsed) {
+			const restored = savedRightWidthRef.current || DEFAULT_RIGHT_WIDTH;
+			setRightWidth(Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, restored)));
 			setRightCollapsed(false);
-			return;
+		} else {
+			savedRightWidthRef.current = rightWidth;
+			setRightWidth(0);
+			setRightCollapsed(true);
 		}
+	}, [rightCollapsed, rightWidth]);
 
-		panel.collapse();
-		setRightCollapsed(true);
+	const openRightSidebar = React.useCallback(() => {
+		const restored = savedRightWidthRef.current || DEFAULT_RIGHT_WIDTH;
+		setRightWidth(Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, restored)));
+		setRightCollapsed(false);
 	}, []);
 
-	const handleLeftResize = React.useCallback((size: PanelResizePayload) => {
-		const panel = leftPanelRef.current;
-		if (!panel) {
-			return;
-		}
-
-		if (size.inPixels <= LEFT_COLLAPSE_THRESHOLD_PX && !panel.isCollapsed()) {
-			panel.collapse();
-		}
-		if (size.inPixels >= LEFT_EXPAND_THRESHOLD_PX && panel.isCollapsed()) {
-			panel.expand();
-		}
-
-		setLeftCollapsed(panel.isCollapsed());
-	}, []);
-
-	const handleRightResize = React.useCallback((size: PanelResizePayload) => {
-		const panel = rightPanelRef.current;
-		if (!panel) {
-			return;
-		}
-
-		if (size.inPixels <= RIGHT_COLLAPSE_THRESHOLD_PX && !panel.isCollapsed()) {
-			panel.collapse();
-		}
-		if (size.inPixels >= RIGHT_EXPAND_THRESHOLD_PX && panel.isCollapsed()) {
-			panel.expand();
-		}
-
-		setRightCollapsed(panel.isCollapsed());
-	}, []);
-
-	const handleLayoutChanged = React.useCallback(
-		(layoutById: Record<string, number>) => {
-			const layout = [
-				layoutById["dashboard-left-panel"],
-				layoutById["dashboard-main-panel"],
-				layoutById["dashboard-right-panel"],
-			];
-
-			if (layout.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
-				return;
-			}
-
-			safeWriteCookie(layout as [number, number, number]);
-		},
-		[]
-	);
+	// ── Computed widths ─────────────────────────────────────────────────────
+	const effectiveLeftWidth = leftCollapsed ? LEFT_COLLAPSED_WIDTH : leftWidth;
+	const effectiveRightWidth = rightCollapsed ? 0 : rightWidth;
 
 	return (
 		<div className="flex h-screen w-full overflow-hidden bg-background">
-			<div className="relative hidden h-full w-full md:block">
-				<ResizablePanelGroup
-					orientation="horizontal"
-					onLayoutChanged={handleLayoutChanged}
-					className="group/panes h-full w-full overflow-hidden"
+			{/* Desktop layout */}
+			<div className="relative hidden h-full w-full md:flex">
+				{/* Left sidebar — relative so the edge handle can be positioned */}
+				<div
+					className="relative h-full shrink-0 overflow-visible transition-[width] duration-200 ease-out"
+					style={{
+						width: effectiveLeftWidth,
+						transitionDuration: draggingRef.current === "left" ? "0ms" : undefined,
+					}}
 				>
-					<ResizablePanel
-						id="dashboard-left-panel"
-						defaultSize={`${defaultLayout[0]}%`}
-						minSize="60px"
-						maxSize="280px"
-						collapsible
-						collapsedSize="60px"
-						panelRef={leftPanelRef}
-						onResize={handleLeftResize}
-						className="h-full overflow-hidden"
-					>
+					<div className="h-full overflow-hidden">
 						<LeftSidebar
 							isCollapsed={leftCollapsed}
 							onToggleCollapse={toggleLeftSidebar}
 						/>
-					</ResizablePanel>
-
-					<ResizableHandle
-						withHandle
-						className="opacity-0 transition-opacity group-hover/panes:opacity-100 hover:opacity-100 focus-within:opacity-100"
+					</div>
+					{/* Drag handle on the right edge of the left sidebar */}
+					<EdgeDragHandle
+						side="left"
+						onDragStart={(e) => startDrag("left", e)}
 					/>
+				</div>
 
-					<ResizablePanel
-						id="dashboard-main-panel"
-						defaultSize={`${defaultLayout[1]}%`}
-						className="h-full min-w-0"
+				{/* Main content */}
+				<main className="scrollbar-thin h-full min-w-0 flex-1 overflow-y-auto bg-background">
+					<div className="h-full px-4 py-5 lg:px-6">{children}</div>
+				</main>
+
+				{/* Right sidebar — relative so the edge handle can be positioned */}
+				{!rightCollapsed && (
+					<div
+						className="relative h-full shrink-0 overflow-visible transition-[width] duration-200 ease-out"
+						style={{
+							width: effectiveRightWidth,
+							transitionDuration: draggingRef.current === "right" ? "0ms" : undefined,
+						}}
 					>
-						<main className="scrollbar-thin h-full flex-1 overflow-y-auto bg-background">
-							<div className="h-full px-4 py-5 lg:px-6">{children}</div>
-						</main>
-					</ResizablePanel>
-
-					<ResizableHandle
-						withHandle
-						className="opacity-0 transition-opacity group-hover/panes:opacity-100 hover:opacity-100 focus-within:opacity-100"
-					/>
-
-					<ResizablePanel
-						id="dashboard-right-panel"
-						defaultSize={`${defaultLayout[2]}%`}
-						minSize="0px"
-						maxSize="420px"
-						collapsible
-						collapsedSize="0px"
-						panelRef={rightPanelRef}
-						onResize={handleRightResize}
-						className="h-full overflow-hidden"
-					>
-						<RightSidebar
-							isCollapsed={rightCollapsed}
-							onToggleCollapse={toggleRightSidebar}
+						{/* Drag handle on the left edge of the right sidebar */}
+						<EdgeDragHandle
+							side="right"
+							onDragStart={(e) => startDrag("right", e)}
 						/>
-					</ResizablePanel>
-				</ResizablePanelGroup>
+						<div className="h-full overflow-hidden">
+							<RightSidebar
+								isCollapsed={false}
+								onToggleCollapse={toggleRightSidebar}
+							/>
+						</div>
+					</div>
+				)}
 
+				{/* AI Assistant FAB — shown when right sidebar is collapsed */}
 				{rightCollapsed && (
 					<button
 						type="button"
-						onClick={toggleRightSidebar}
-						className="absolute right-3 top-1/2 z-50 flex size-8 -translate-y-1/2 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						aria-label="Expand right sidebar"
-						title="Expand right sidebar"
+						onClick={openRightSidebar}
+						className="fixed bottom-6 right-6 z-50 flex size-12 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 hover:bg-primary/90 active:scale-95"
+						aria-label="Open AI Assistant"
+						title="Open AI Assistant"
 					>
-						<ChevronsLeft className="size-4" />
+						<Sparkles className="size-6" />
 					</button>
 				)}
 			</div>
+
+			{/* Mobile layout */}
 			<div className="scrollbar-thin h-full overflow-y-auto md:hidden">
 				<main className="mx-auto min-h-full w-full max-w-4xl px-4 py-6">
 					{children}
 				</main>
 			</div>
-			<QuickCreateModal />
+
+
 		</div>
 	);
 }

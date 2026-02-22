@@ -1,75 +1,82 @@
 import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import { PDFParse } from "pdf-parse"; 
 import { VoyageAIClient } from "voyageai";
 import { prisma } from "@repo/db";
 
-async function executeRAGRetrieval() {
-  const client = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY });
-  const textPayload = "PostgreSQL is a highly stable, open-source relational database.";
-  const query = "Tell me about SQL databases.";
+const voyage = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY });
 
-  // 1. Generate Embeddings
-  const [docEmbed, queryEmbed] = await Promise.all([
-    client.embed({ input: [textPayload], model: "voyage-4" }),
-    client.embed({ input: [query], model: "voyage-4" })
-  ]);
+async function permanentIngest(filePath: string) {
+  console.log(`\n--- PERMANENT INGESTION START ---`);
+  console.log(`📄 File: ${path.basename(filePath)}`);
 
-  const docVectorStr = `[${(docEmbed.data?.[0]?.embedding ?? []).join(',')}]`;
-  const queryVectorStr = `[${(queryEmbed.data?.[0]?.embedding ?? []).join(',')}]`;
-
-
+  const dataBuffer = fs.readFileSync(filePath);
+  const parser = new PDFParse({ data: dataBuffer });
   
-  const workspaceId = "rag-workspace";
-  const itemId = "rag-item-" + Date.now();
+  try {
+    const result = await parser.getText();
+    // Chunking by double newlines
+    const chunks = result.text.split(/\n\s*\n/).filter((t) => t.trim().length > 20);
+    
+    console.log(`🧬 Generating embeddings for ${chunks.length} chunks...`);
 
-  await prisma.workspace.upsert({
-    where: { slug: workspaceId },
-    update: {},
-    create: { id: workspaceId, name: "RAG Workspace", slug: workspaceId }
-  });
+    // 1. Create a permanent Workspace for these docs if it doesn't exist
+    const workspaceId = "permanent-knowledge-base";
+    await prisma.workspace.upsert({
+      where: { slug: workspaceId },
+      update: {},
+      create: { 
+        id: workspaceId, 
+        name: "Company Knowledge Base", 
+        slug: workspaceId 
+      }
+    });
 
-  await prisma.item.create({
-    data: {
-      id: itemId,
-      workspaceId,
-      type: "PAGE",
-      title: "Database Documentation",
-      contentJson: { text: textPayload } // Storing the raw data
+    // 2. Process and Store
+    for (let i = 0; i < chunks.length; i++) {
+      const itemId = `doc-${Date.now()}-${i}`;
+      
+      // Get Embedding from Voyage-4
+      const embed = await voyage.embed({ input: [chunks[i]], model: "voyage-4" });
+      const vectorStr = `[${embed.data?.[0]?.embedding?.join(",")}]`;
+
+      // Save the Text
+      await prisma.item.create({
+        data: {
+          id: itemId,
+          workspaceId: workspaceId,
+          type: "PAGE",
+          title: `${path.basename(filePath)} - Part ${i + 1}`,
+          contentJson: { text: chunks[i] }
+        }
+      });
+
+      // Save the Vector
+      await prisma.$executeRaw`
+        INSERT INTO "VectorEmbedding" (id, "itemId", "chunkIndex", embedding, model, status)
+        VALUES (${"vec-" + itemId}, ${itemId}, ${i}, ${vectorStr}::vector, 'voyage-4', 'READY'::"EmbeddingState")
+      `;
+      
+      process.stdout.write("."); // Progress indicator
     }
-  });
 
-  const vectorId = `vec-${Date.now()}`;
-  await prisma.$executeRaw`
-    INSERT INTO "VectorEmbedding" (id, "itemId", "chunkIndex", embedding, model, status)
-    VALUES (${vectorId}, ${itemId}, 0, ${docVectorStr}::vector, 'voyage-4', 'READY'::"EmbeddingState")
-  `;
+    console.log(`\n\n✅ SUCCESS: ${chunks.length} chunks are now stored permanently in Supabase.`);
+    console.log(`Workspace: ${workspaceId}`);
 
-  // 3. Retrieve Foreign Key via Vector Similarity
-  const vectorMatches: any[] = await prisma.$queryRaw`
-    SELECT "itemId", 1 - (embedding <=> ${queryVectorStr}::vector) AS similarity
-    FROM "VectorEmbedding"
-    ORDER BY embedding <=> ${queryVectorStr}::vector
-    LIMIT 1
-  `;
-
-  const match = vectorMatches[0];
-
-  // 4. Retrieve Original Data via Foreign Key
-  const retrievedItem = await prisma.item.findUnique({
-    where: { id: match.itemId },
-    select: {
-      title: true,
-      contentJson: true
-    }
-  });
-
-  console.log("--- DATABASE RETRIEVAL OUTPUT ---");
-  console.log(`Query: ${query}`);
-  console.log(`Vector Match Similarity: ${match.similarity.toFixed(4)}`);
-  console.log(`Retrieved Document Title: ${retrievedItem?.title}`);
-  
-  // Extracting the exact string payload saved to the database
-  const parsedContent = retrievedItem?.contentJson as { text: string };
-  console.log(`Retrieved Data Payload: "${parsedContent.text}"`);
+  } catch (error) {
+    console.error("❌ Ingestion failed:", error);
+  } finally {
+    await parser.destroy();
+    await prisma.$disconnect();
+  }
 }
 
-executeRAGRetrieval().catch(console.error);
+const pathArg = process.argv[2];
+if (!pathArg) {
+  console.error("Please provide a PDF path.");
+  process.exit(1);
+}
+
+permanentIngest(pathArg);
+

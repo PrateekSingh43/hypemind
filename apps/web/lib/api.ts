@@ -2,7 +2,7 @@ const API_BASE_URL =
 	process.env.NEXT_PUBLIC_API_BASE_URL ||
 	process.env.NEXT_PUBLIC_API_URL ||
 	"http://localhost:4000/api/v1";
-const REQUEST_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 3000);
+const REQUEST_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 30000);
 
 const ACCESS_TOKEN_KEY = "hm:access-token:v1";
 const WORKSPACE_ID_KEY = "hm:workspace-id:v1";
@@ -99,9 +99,9 @@ async function request<T>(
 	if (!res.ok) {
 		const message =
 			typeof responsePayload === "object" &&
-			responsePayload !== null &&
-			"message" in responsePayload &&
-			typeof (responsePayload as { message?: unknown }).message === "string"
+				responsePayload !== null &&
+				"message" in responsePayload &&
+				typeof (responsePayload as { message?: unknown }).message === "string"
 				? (responsePayload as { message: string }).message
 				: `API ${method} Error (${res.status})`;
 		throw new Error(message);

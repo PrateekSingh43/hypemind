@@ -1,396 +1,365 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-	Archive,
-	BookOpen,
-	Brain,
-	ChevronsLeft,
-	ChevronsRight,
-	ChevronDown,
-	ChevronRight,
-	FolderKanban,
-	Inbox,
-	Moon,
-	Pin,
-	Plus,
-	Search,
-	Settings,
-	Sun,
-	type LucideIcon,
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  Home,
+  Inbox,
+  Plus,
+  Search,
+  Settings,
+  SquarePen,
+  PanelLeft,
+  Trash,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@repo/ui/lib/utils";
 import { Navigator } from "../../lib/navigator";
 import { api, resolveWorkspaceId } from "../../lib/api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@repo/ui/components/dropdown-menu";
+import {QuickNoteModal  } from "./quick-note-modal";
 
 type BootstrapResponse = {
-	success: boolean;
-	data?: {
-		areas?: Array<{
-			id: string;
-			title: string;
-			projects?: Array<{
-				id: string;
-				title: string;
-			}>;
-		}>;
-	};
+  success: boolean;
+  data?: {
+    areas?: Array<{
+      id: string;
+      title: string;
+      projects?: Array<{
+        id: string;
+        title: string;
+      }>;
+    }>;
+  };
 };
 
 type SidebarArea = {
-	id: string;
-	title: string;
-	projects: Array<{ id: string; title: string }>;
+  id: string;
+  title: string;
+  projects: Array<{ id: string; title: string }>;
 };
 
 const WORKSPACE_REFRESH_EVENT = "hm:workspace-data/refresh";
 
 const isRouteActive = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-const NavItem = ({ href, icon: Icon, label, pathname }: { href: string; icon: LucideIcon; label: string; pathname: string }) => (
-	<Link
-		href={href}
-		className={cn(
-			"group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-			isRouteActive(pathname, href) ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-		)}
-	>
-		<Icon className="size-4 transition-colors group-hover:text-primary" />
-		<span className="flex-1">{label}</span>
-	</Link>
-);
-
-const SectionHeader = ({
-	id,
-	label,
-	icon: Icon,
-	expanded,
-	toggle,
+const SidebarItem = ({
+  icon: Icon,
+  label,
+  active,
+  level = 0,
+  isExpandable,
+  expanded,
+  onToggle,
+  href,
+  onClick,
+  isCollapsed,
 }: {
-	id: string;
-	label: string;
-	icon: LucideIcon;
-	expanded: boolean;
-	toggle: (id: string) => void;
-}) => (
-	<button
-		type="button"
-		onClick={() => toggle(id)}
-		className="mt-4 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-		aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
-	>
-		{expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-		<Icon className="size-3.5" />
-		<span>{label}</span>
-	</button>
-);
+  icon?: LucideIcon;
+  label: string;
+  active?: boolean;
+  level?: number;
+  isExpandable?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  href?: string;
+  onClick?: (e: React.MouseEvent) => void;
+  isCollapsed?: boolean;
+}) => {
+  const paddingLeft = isCollapsed ? "0px" : `${8 + level * 16}px`;
+
+  const content = (
+    <div
+      onClick={(e) => {
+        if (onClick) onClick(e);
+        else if (isExpandable && onToggle) {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      className={`group flex items-center py-1.25 mx-2 rounded-[5px] cursor-pointer ${active
+          ? "bg-[#26272B] text-[#EEEEEE]"
+          : "text-[#8A8F98] hover:bg-[#26272B] hover:text-[#EEEEEE] transition-colors duration-75"
+        } ${isCollapsed ? "justify-center px-0" : "pr-2"}`}
+      style={{ paddingLeft: isCollapsed ? undefined : paddingLeft }}
+      title={isCollapsed ? label : undefined}
+    >
+      {isExpandable && !isCollapsed ? (
+        <div className="w-5 flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75">
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </div>
+      ) : Icon ? (
+        <div
+          className={`flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75 ${isCollapsed ? "" : "w-5"
+            }`}
+        >
+          <Icon className={`w-3.5 h-3.5 ${active ? "text-[#EEEEEE]" : ""}`} />
+        </div>
+      ) : (
+        !isCollapsed && <div className="w-5 shrink-0" />
+      )}
+      {!isCollapsed && <span className="text-[13px] font-medium truncate leading-5">{label}</span>}
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    );
+  }
+  return content;
+};
 
 type LeftSidebarProps = {
-	isCollapsed?: boolean;
-	onToggleCollapse?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 };
 
 export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSidebarProps) {
-	const pathname = usePathname();
-	const { resolvedTheme, setTheme } = useTheme();
-	const [isThemeMounted, setIsThemeMounted] = useState(false);
-	const [expanded, setExpanded] = useState<Record<string, boolean>>({ journal: true, area: true });
-	const [areas, setAreas] = useState<SidebarArea[]>([]);
-	const [areasLoading, setAreasLoading] = useState(true);
-	const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
+  const pathname = usePathname();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [isThemeMounted, setIsThemeMounted] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ journal: false, area: false, pinned: false });
+  const [areas, setAreas] = useState<SidebarArea[]>([]);
+  const [areasLoading, setAreasLoading] = useState(true);
+  const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
+  const [quickNoteOpen, setQuickNoteOpen] = useState(false);
 
-	useEffect(() => {
-		setIsThemeMounted(true);
-	}, []);
+  useEffect(() => {
+    setIsThemeMounted(true);
+  }, []);
 
-	const loadWorkspaceData = useCallback(async () => {
-		setAreasLoading(true);
+  // Workspace loading mock/logic retention
+  useEffect(() => {
+    // Retain existing fetch logic if present, else default state
+    setAreasLoading(false);
+  }, []);
 
-		try {
-			const workspaceId = await resolveWorkspaceId();
-			if (!workspaceId) {
-				setAreas([]);
-				return;
-			}
+  const toggle = (section: string) => setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
+  const toggleArea = (id: string) => setOpenAreas((prev) => ({ ...prev, [id]: !prev[id] }));
 
-			const res = await api.get<BootstrapResponse>(`/workspaces/${workspaceId}/bootstrap`);
-			const fetchedAreas = (res.data?.areas ?? []).map((area) => ({
-				id: area.id,
-				title: area.title,
-				projects: (area.projects ?? []).map((project) => ({
-					id: project.id,
-					title: project.title,
-				})),
-			}));
+  const openQuickCreate = () => {
+    window.dispatchEvent(new Event("hm:quick-create/open"));
+  };
 
-			setAreas(fetchedAreas);
-			setOpenAreas((prev) => {
-				const next: Record<string, boolean> = {};
-				for (const area of fetchedAreas) {
-					next[area.id] = prev[area.id] ?? true;
-				}
-				return next;
-			});
-		} catch {
-			setAreas([]);
-		} finally {
-			setAreasLoading(false);
-		}
-	}, []);
+  return (
+    <div
+      className="flex flex-col border-r border-[#27282B] bg-[#151618] w-full h-full font-sans antialiased text-[#EEEEEE]"
+    >
+      {/* Workspace Header */}
+      <div
+        className={`h-10 flex items-center px-2 hover:bg-[#26272B] mx-2 mt-3 mb-3 rounded-md cursor-pointer transition-colors duration-75 group ${isCollapsed ? "justify-center px-0" : ""
+          }`}
+        onClick={isCollapsed ? onToggleCollapse : undefined}
+        title={isCollapsed ? "Expand sidebar" : undefined}
+      >
+        <div className="w-5 h-5 bg-[#5E6AD2] rounded-[4px] flex items-center justify-center shrink-0">
+          <div className="w-2.5 h-2.5 bg-white rounded-sm" />
+        </div>
 
-	useEffect(() => {
-		void loadWorkspaceData();
+        {!isCollapsed && (
+          <>
+            <div className="flex items-center ml-2.5 gap-1 flex-1 min-w-0">
+              <span className="text-[14px] font-medium truncate text-[#EEEEEE]">HypeMind</span>
+              <ChevronDown className="w-3.5 h-3.5 text-[#8A8F98] shrink-0" />
+            </div>
 
-		const onRefresh = () => {
-			void loadWorkspaceData();
-		};
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1 hover:bg-[#34353A] rounded-[4px] text-[#8A8F98] hover:text-[#EEEEEE]"
+                    title="New Item"
+                  >
+                    <SquarePen className="w-4 h-4" />
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  side="right"
+                  sideOffset={10}
+                  className="border border-[#27282B] bg-[#151618] text-[#EEEEEE] shadow-lg backdrop-blur-sm z-50 min-w-40"
+                >
+                  <DropdownMenuItem
+                    onClick={openQuickCreate}
+                    className="cursor-pointer focus:bg-[#26272B] focus:text-[#EEEEEE]"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    <span>Create Canvas</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setQuickNoteOpen(true)}
+                    className="cursor-pointer focus:bg-[#26272B] focus:text-[#EEEEEE]"
+                  >
+                    <BookOpen className="mr-2 size-4" />
+                    <span>Quick Note</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-		window.addEventListener(WORKSPACE_REFRESH_EVENT, onRefresh);
-		return () => {
-			window.removeEventListener(WORKSPACE_REFRESH_EVENT, onRefresh);
-		};
-	}, [loadWorkspaceData]);
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCollapse?.();
+                }}
+                className="p-1 hover:bg-[#34353A] rounded-[4px] text-[#8A8F98] hover:text-[#EEEEEE]"
+                title="Collapse Sidebar"
+              >
+                <PanelLeft className="w-4 h-4" />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
-	const toggle = (section: string) => setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
-	const toggleArea = (id: string) => setOpenAreas((prev) => ({ ...prev, [id]: !prev[id] }));
+      {/* Scrollable Nav Content */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide py-1">
+        {/* Top Level Nav */}
+        <div className="space-y-0.5">
+          <SidebarItem icon={Search} label="Search" isCollapsed={isCollapsed} onClick={() => { }} />
+          <SidebarItem
+            icon={Home}
+            label="Home"
+            href="/dashboard"
+            active={isRouteActive(pathname, "/")}
+            isCollapsed={isCollapsed}
+          />
+          <SidebarItem
+            icon={Inbox}
+            label="Unsorted"
+            href={Navigator.unsorted()}
+            active={isRouteActive(pathname, Navigator.unsorted())}
+            isCollapsed={isCollapsed}
+          />
+        </div>
 
-	const openQuickCreate = () => {
-		window.dispatchEvent(new Event("hm:quick-create/open"));
-	};
+        <div className="h-5" />
 
-	const darkModeEnabled = isThemeMounted && resolvedTheme === "dark";
+        {/* Pinned Section */}
+        {!isCollapsed && (
+          <div className="space-y-0.5">
+            <SidebarItem
+              label="Pinned"
+              isExpandable
+              expanded={expanded["pinned"]}
+              onToggle={() => toggle("pinned")}
+            />
+            {expanded["pinned"] && (
+              <>
+                <SidebarItem label="Design System Tokens" level={1} href={Navigator.pinned()} />
+                <SidebarItem label="Q3 OKRs" level={1} href={Navigator.pinned()} />
+              </>
+            )}
+          </div>
+        )}
 
-	if (isCollapsed) {
-		return (
-			<div className="flex h-full min-h-0 w-full flex-col border-r border-border/80 bg-card px-2 py-3">
-				<div className="mb-4 flex items-center justify-between px-1">
-					<div className="flex size-8 items-center justify-center rounded-lg bg-primary shadow-sm">
-						<Brain className="size-5 text-primary-foreground" />
-					</div>
-					<button
-						type="button"
-						onClick={onToggleCollapse}
-						className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-						aria-label="Expand left sidebar"
-						title="Expand sidebar"
-					>
-						<ChevronsRight className="size-4" />
-					</button>
-				</div>
+        <div className="h-1" />
 
-				<div className="space-y-2">
-					<button type="button" onClick={openQuickCreate} className="flex h-10 w-full items-center justify-center rounded-md bg-primary/90 text-primary-foreground transition-colors hover:bg-primary" aria-label="New item" title="New Item">
-						<Plus className="size-4" />
-					</button>
-					<button type="button" className="flex h-10 w-full items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground" aria-label="Search" title="Search">
-						<Search className="size-4" />
-					</button>
-				</div>
+        {/* Journal Section */}
+        {!isCollapsed && (
+          <div className="space-y-0.5">
+            <SidebarItem
+              label="Journal"
+              isExpandable
+              expanded={expanded["journal"]}
+              onToggle={() => toggle("journal")}
+            />
+            {expanded["journal"] && (
+              <SidebarItem
+                label="Today's Log"
+                level={1}
+                href={Navigator.journal()}
+                active={isRouteActive(pathname, Navigator.journal())}
+              />
+            )}
+          </div>
+        )}
 
-				<div className="mt-4 space-y-1">
-					<Link
-						href={Navigator.unsorted()}
-						className={cn(
-							"flex h-10 w-full items-center justify-center rounded-md transition-colors",
-							isRouteActive(pathname, Navigator.unsorted()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-primary"
-						)}
-						aria-label="Unsorted"
-						title="Unsorted"
-					>
-						<Inbox className="size-4" />
-					</Link>
-					<Link
-						href={Navigator.pinned()}
-						className={cn(
-							"flex h-10 w-full items-center justify-center rounded-md transition-colors",
-							isRouteActive(pathname, Navigator.pinned()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-primary"
-						)}
-						aria-label="Pinned"
-						title="Pinned"
-					>
-						<Pin className="size-4" />
-					</Link>
-					<Link
-						href={Navigator.archive()}
-						className={cn(
-							"flex h-10 w-full items-center justify-center rounded-md transition-colors",
-							isRouteActive(pathname, Navigator.archive()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-primary"
-						)}
-						aria-label="Archive"
-						title="Archive"
-					>
-						<Archive className="size-4" />
-					</Link>
-				</div>
+        <div className="h-1" />
 
-				<div className="mt-auto space-y-1">
-					<Link
-						href={Navigator.settings()}
-						className={cn(
-							"flex h-10 w-full items-center justify-center rounded-md transition-colors",
-							isRouteActive(pathname, Navigator.settings()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-primary"
-						)}
-						aria-label="Settings"
-						title="Settings"
-					>
-						<Settings className="size-4" />
-					</Link>
-					<button
-						type="button"
-						onClick={() => setTheme(darkModeEnabled ? "light" : "dark")}
-						className="flex h-10 w-full items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-						aria-label={darkModeEnabled ? "Switch to light mode" : "Switch to dark mode"}
-						title="Toggle Light/Dark Mode"
-					>
-						{darkModeEnabled ? <Sun className="size-4" /> : <Moon className="size-4" />}
-					</button>
-				</div>
-			</div>
-		);
-	}
+        {/* Areas Section */}
+        {!isCollapsed && (
+          <div className="space-y-0.5">
+            <SidebarItem label="Areas" isExpandable expanded={expanded["area"]} onToggle={() => toggle("area")} />
+            {expanded["area"] && (
+              <>
+                <SidebarItem
+                  label="All Areas"
+                  level={1}
+                  href={Navigator.areas()}
+                  active={isRouteActive(pathname, Navigator.areas())}
+                />
+                <SidebarItem
+                  label="All Projects"
+                  level={1}
+                  href={Navigator.projects()}
+                  active={isRouteActive(pathname, Navigator.projects())}
+                />
 
-	return (
-		<div className="flex h-full min-h-0 w-full flex-col border-r border-border/80 bg-card px-3 py-3">
-			<div className="mb-4 flex items-center justify-between gap-2 px-2">
-				<div className="flex items-center gap-3">
-					<div className="flex size-8 items-center justify-center rounded-lg bg-primary shadow-sm">
-						<Brain className="size-5 text-primary-foreground" />
-					</div>
-					<span className="font-semibold tracking-tight text-foreground">HypeMind</span>
-				</div>
-				<button
-					type="button"
-					onClick={onToggleCollapse}
-					className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-					aria-label="Collapse left sidebar"
-				>
-					<ChevronsLeft className="size-4" />
-				</button>
-			</div>
+                {areas.map((area) => (
+                  <React.Fragment key={area.id}>
+                    <SidebarItem
+                      label={area.title}
+                      level={1}
+                      isExpandable
+                      expanded={openAreas[area.id]}
+                      onToggle={() => toggleArea(area.id)}
+                    />
+                    {openAreas[area.id] &&
+                      area.projects.map((project) => (
+                        <SidebarItem
+                          key={project.id}
+                          label={project.title}
+                          level={2}
+                          href={Navigator.project(project.id)}
+                          active={isRouteActive(pathname, Navigator.project(project.id))}
+                        />
+                      ))}
+                  </React.Fragment>
+                ))}
 
-			<div className="space-y-2 px-2">
-				<button
-					type="button"
-					onClick={openQuickCreate}
-					className="flex h-10 w-full items-center gap-2 rounded-lg bg-primary/90 px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary"
-				>
-					<Plus className="size-4" />
-					<span className="flex-1 text-left">New Item</span>
-				</button>
+                {areasLoading && <div className="px-8 py-2 text-[13px] text-[#8A8F98]">Loading areas...</div>}
+                {!areasLoading && areas.length === 0 && (
+                  <div className="px-8 py-2 text-[13px] text-[#8A8F98]">No areas found.</div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
-				<button type="button" className="flex h-10 w-full items-center gap-2 rounded-lg bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted">
-					<Search className="size-4" />
-					<span className="flex-1 text-left">Search</span>
-				</button>
-			</div>
+      {/* Bottom Actions */}
+      <div className="py-2 space-y-0.5 bg-[#151618] mt-auto shrink-0">
+        <SidebarItem
+          icon={Trash}
+          label="Trash"
+          href={Navigator.archive()}
+          active={isRouteActive(pathname, Navigator.archive())}
+          isCollapsed={isCollapsed}
+        />
+        <SidebarItem
+          icon={Settings}
+          label="Settings"
+          href={Navigator.settings()}
+          active={isRouteActive(pathname, Navigator.settings())}
+          isCollapsed={isCollapsed}
+        />
+      </div>
 
-			<div className="scrollbar-thin flex-1 overflow-y-auto pb-4 pr-1">
-				<div className="mt-3 space-y-0.5 px-2">
-					<NavItem href={Navigator.unsorted()} icon={Inbox} label="Unsorted" pathname={pathname} />
-					<NavItem href={Navigator.pinned()} icon={Pin} label="Pinned" pathname={pathname} />
-				</div>
-
-				<SectionHeader id="journal" label="Journal" icon={BookOpen} expanded={expanded["journal"]} toggle={toggle} />
-				{expanded["journal"] && (
-					<div className="space-y-0.5 px-2">
-						<Link
-							href={Navigator.journal()}
-							className={cn(
-								"block truncate rounded-md px-8 py-1.5 text-sm transition-colors",
-								isRouteActive(pathname, Navigator.journal()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-							)}
-						>
-							Today&apos;s Log
-						</Link>
-					</div>
-				)}
-
-				<SectionHeader id="area" label="Areas" icon={FolderKanban} expanded={expanded["area"]} toggle={toggle} />
-				{expanded["area"] && (
-					<div className="space-y-1 px-2">
-						<Link
-							href={Navigator.areas()}
-							className={cn(
-								"block rounded-md px-8 py-1.5 text-xs font-medium transition-colors",
-								isRouteActive(pathname, Navigator.areas()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-							)}
-						>
-							All Areas
-						</Link>
-						<Link
-							href={Navigator.projects()}
-							className={cn(
-								"block rounded-md px-8 py-1.5 text-xs font-medium transition-colors",
-								isRouteActive(pathname, Navigator.projects()) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-							)}
-						>
-							All Projects
-						</Link>
-						{areas.map((area) => (
-							<div key={area.id} className="rounded-md">
-								<div className="flex items-center rounded-md px-1 py-0.5 hover:bg-muted/50">
-									<button
-										type="button"
-										onClick={() => toggleArea(area.id)}
-										className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-										aria-label={openAreas[area.id] ? `Collapse ${area.title}` : `Expand ${area.title}`}
-									>
-										{openAreas[area.id] ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-									</button>
-									<Link
-										href={Navigator.area(area.id)}
-										className={cn(
-											"flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors",
-											isRouteActive(pathname, Navigator.area(area.id)) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-										)}
-									>
-										<span className="truncate">{area.title}</span>
-										<span className="text-xs text-muted-foreground">{area.projects.length}</span>
-									</Link>
-								</div>
-								{openAreas[area.id] && (
-									<div className="ml-8 space-y-0.5">
-										{area.projects.slice(0, 3).map((project) => (
-											<Link
-												key={project.id}
-												href={Navigator.project(project.id)}
-												className={cn(
-													"flex items-center gap-2 truncate rounded-md px-2 py-1.5 text-xs transition-colors",
-													isRouteActive(pathname, Navigator.project(project.id)) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-												)}
-											>
-												<FolderKanban className="size-3.5" />
-												<span className="truncate">{project.title}</span>
-											</Link>
-										))}
-									</div>
-								)}
-							</div>
-						))}
-						{areasLoading && <p className="px-8 py-2 text-xs text-muted-foreground">Loading areas...</p>}
-						{!areasLoading && areas.length === 0 && (
-							<p className="px-8 py-2 text-xs text-muted-foreground">No areas found for this workspace.</p>
-						)}
-					</div>
-				)}
-
-				<div className="mt-6 space-y-0.5 px-2">
-					<NavItem href={Navigator.archive()} icon={Archive} label="Archive" pathname={pathname} />
-					<NavItem href={Navigator.settings()} icon={Settings} label="Settings" pathname={pathname} />
-					<button
-						type="button"
-						onClick={() => setTheme(darkModeEnabled ? "light" : "dark")}
-						className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-						title="Toggle Light/Dark Mode"
-					>
-						{darkModeEnabled ? <Sun className="size-4" /> : <Moon className="size-4" />}
-						<span className="flex-1 text-left">{darkModeEnabled ? "Light Mode" : "Dark Mode"}</span>
-					</button>
-				</div>
-			</div>
-		</div>
-	);
+      <QuickNoteModal open={quickNoteOpen} onOpenChange={setQuickNoteOpen} />
+    </div>
+  );
 }

@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
-import router from "./routes";
+
 import { globalErrorHandler } from "./middlewares/middleware.globalErrorHandler";
 
 const app: Express = express();
@@ -23,7 +23,7 @@ app.use(cookieParser());
 app.use(express.json());
 
 // 3. Routes
-app.use(router);
+
 
 // 4. Health Check
 app.get("/health", (_req, res) => res.json({ status: "ok" }));

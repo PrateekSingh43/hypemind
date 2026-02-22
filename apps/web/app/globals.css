@@ -2,6 +2,7 @@
 @custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
 @layer base {
+
 	:root,
 	[data-theme="light"] {
 		--background: 0 0% 100%;
@@ -104,40 +105,53 @@
 	display: none;
 }
 
+/* ── Scrollbar: hidden by default, visible on hover, short thumb ── */
+
+/* Firefox: hidden by default */
 .scrollbar-thin {
+	scrollbar-width: none;
+	scrollbar-color: transparent transparent;
+}
+
+/* Firefox: show on hover */
+.scrollbar-thin:hover {
 	scrollbar-width: thin;
 	scrollbar-color: #99a0ad transparent;
 }
 
-.dark .scrollbar-thin {
-	scrollbar-color: #686875 transparent;
+.dark .scrollbar-thin:hover {
+	scrollbar-color: #55565C transparent;
 }
 
+/* Webkit: 6px wide, hidden by default */
 .scrollbar-thin::-webkit-scrollbar {
-	width: 8px;
-	height: 8px;
+	width: 6px;
+	height: 6px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
 	background: transparent;
-	margin-block: 8px;
+	margin-block: 25%;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-	background-color: #99a0ad;
+	background-color: transparent;
 	border-radius: 9999px;
-	border: 2px solid transparent;
-	background-clip: content-box;
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-	background-color: #727c8e;
+/* Webkit: show on hover */
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+	background-color: #c4c8cf;
 }
 
-.dark .scrollbar-thin::-webkit-scrollbar-thumb {
-	background-color: #686875;
+.scrollbar-thin:hover::-webkit-scrollbar-thumb:hover {
+	background-color: #a0a5ad;
 }
 
-.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-	background-color: #888897;
+.dark .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+	background-color: #55565C;
+}
+
+.dark .scrollbar-thin:hover::-webkit-scrollbar-thumb:hover {
+	background-color: #72737A;
 }

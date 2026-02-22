@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ArrowUpRight, ChevronsLeft, ChevronsRight, Loader2, Send, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUpRight, ChevronsRight, Loader2, Send, Sparkles } from "lucide-react";
 import { api, resolveWorkspaceId } from "../../lib/api";
 
 type ChatMessage = {
@@ -43,6 +43,12 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 	const [isSending, setIsSending] = useState(false);
 	const [chatError, setChatError] = useState<string | null>(null);
 	const [smartInsight, setSmartInsight] = useState("Syncing workspace context...");
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+
+	// Auto-scroll to bottom when new messages arrive
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [messages]);
 
 	const initializeContext = useCallback(async () => {
 		try {
@@ -65,7 +71,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 
 			setSmartInsight(
 				inboxCount > 0
-					? `You currently have ${inboxCount} unsorted item${inboxCount === 1 ? "" : "s"} waiting to be processed.`
+					? `You have ${inboxCount} unsorted item${inboxCount === 1 ? "" : "s"} waiting to be processed.`
 					: "Your unsorted inbox is clear right now."
 			);
 
@@ -146,7 +152,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 						aria-label="Expand right sidebar"
 						title="Expand sidebar"
 					>
-						<ChevronsLeft className="size-4" />
+						<ChevronsRight className="size-4 rotate-180" />
 					</button>
 				</div>
 				<div className="flex flex-1 items-center justify-center">
@@ -159,54 +165,84 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 	}
 
 	return (
-		<div className="flex h-full min-h-0 w-full flex-col border-l border-border/80 bg-card px-3 py-3">
-			<div className="mb-3 flex h-11 shrink-0 items-center justify-between border-b border-border px-1 pb-2">
-				<h3 className="text-sm font-semibold text-foreground">AI Partner</h3>
-				<button
-					type="button"
-					onClick={onToggleCollapse}
-					className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-					aria-label="Collapse right sidebar"
-					title="Collapse sidebar"
-				>
-					<ChevronsRight className="size-4" />
-				</button>
-			</div>
-
-			<div className="mb-3 rounded-lg bg-primary/10 p-4">
-				<div className="mb-2 flex items-center gap-2">
-					<Sparkles className="size-4 text-primary" />
-					<h4 className="text-sm font-semibold text-foreground">Smart Insight</h4>
+		<div className="flex h-full min-h-0 w-full flex-col border-l border-[#27282B] bg-[#151618]">
+			{/* ── Smart Insight Card ──────────────────────────────────── */}
+			<div className="shrink-0 px-3 pt-3 pb-2">
+				<div className="rounded-lg bg-[#1E1F2E] p-3">
+					<div className="mb-1.5 flex items-center justify-between">
+						<div className="flex items-center gap-1.5">
+							<Sparkles className="size-3.5 text-primary" />
+							<span className="text-xs font-semibold text-[#EEEEEE]">Smart Insight</span>
+						</div>
+						<button
+							type="button"
+							onClick={onToggleCollapse}
+							className="flex size-6 items-center justify-center rounded text-[#8A8F98] transition-colors hover:bg-[#26272B] hover:text-[#EEEEEE]"
+							aria-label="Collapse sidebar"
+							title="Collapse sidebar"
+						>
+							<ChevronsRight className="size-3.5" />
+						</button>
+					</div>
+					<p className="text-[13px] leading-relaxed text-[#C4C4C4]">{smartInsight}</p>
+					<button
+						type="button"
+						onClick={() => window.dispatchEvent(new Event("hm:quick-create/open"))}
+						className="mt-2.5 inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+					>
+						Create Canvas Draft <ArrowUpRight className="size-3" />
+					</button>
 				</div>
-				<p className="text-sm leading-relaxed text-foreground">{smartInsight}</p>
-				<button
-					type="button"
-					onClick={() => window.dispatchEvent(new Event("hm:quick-create/open"))}
-					className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-				>
-					Create Canvas Draft <ArrowUpRight className="size-3.5" />
-				</button>
 			</div>
 
-			<div className="flex min-h-0 flex-1 flex-col">
-				<div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto pr-1">
+			{/* ── Section Label ───────────────────────────────────────── */}
+			<div className="shrink-0 px-4 pt-2 pb-2">
+				<span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A8F98]">
+					AI Partner
+				</span>
+			</div>
+
+			{/* ── Chat Messages ──────────────────────────────────────── */}
+			<div className="flex min-h-0 flex-1 flex-col px-3">
+				<div className="scrollbar-thin flex-1 space-y-3 overflow-y-auto pb-2">
 					{messages.map((message) => (
 						<div
 							key={message.id}
 							className={
 								message.role === "assistant"
-									? "mr-4 rounded-md bg-muted px-3 py-2 text-sm text-foreground"
-									: "ml-4 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
+									? "flex justify-start"
+									: "flex justify-end"
 							}
 						>
-							{message.content}
+							<div
+								className={
+									message.role === "assistant"
+										? "max-w-[85%] rounded-lg rounded-tl-sm bg-[#2A2B30] px-3 py-2 text-[13px] leading-relaxed text-[#DDDDE0]"
+										: "max-w-[85%] rounded-lg rounded-tr-sm bg-primary px-3 py-2 text-[13px] leading-relaxed text-primary-foreground"
+								}
+							>
+								{message.content}
+							</div>
 						</div>
 					))}
+
+					{isSending && (
+						<div className="flex justify-start">
+							<div className="rounded-lg rounded-tl-sm bg-[#2A2B30] px-3 py-2">
+								<Loader2 className="size-3.5 animate-spin text-[#8A8F98]" />
+							</div>
+						</div>
+					)}
+
+					<div ref={messagesEndRef} />
 				</div>
 
-				{chatError && <p className="mt-2 text-xs text-destructive">{chatError}</p>}
+				{chatError && <p className="shrink-0 py-1 text-[11px] text-destructive">{chatError}</p>}
+			</div>
 
-				<div className="relative mt-3 border-t border-border bg-background pt-3">
+			{/* ── Input Area ─────────────────────────────────────────── */}
+			<div className="shrink-0 border-t border-[#27282B] px-3 py-2.5">
+				<div className="relative">
 					<input
 						type="text"
 						value={input}
@@ -218,7 +254,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 							}
 						}}
 						placeholder="Talk to your AI partner..."
-						className="w-full rounded-md border border-input bg-muted/40 py-2.5 pl-3 pr-10 text-sm transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+						className="w-full rounded-lg border border-[#2A2B30] bg-[#1A1B1E] py-2 pl-3 pr-10 text-[13px] text-[#EEEEEE] placeholder:text-[#5A5A65] transition-colors focus:border-primary/50 focus:outline-none"
 					/>
 					<button
 						type="button"
@@ -226,7 +262,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 							void sendMessage();
 						}}
 						disabled={!input.trim() || isSending}
-						className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+						className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						{isSending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
 					</button>
