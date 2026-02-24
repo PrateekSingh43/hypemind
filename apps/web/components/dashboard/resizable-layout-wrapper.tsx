@@ -239,6 +239,13 @@ export function ResizableLayoutWrapper({
 		setRightCollapsed(false);
 	}, []);
 
+	// Listen for custom event from child pages (e.g., unsorted page AI button)
+	React.useEffect(() => {
+		const handler = () => openRightSidebar();
+		window.addEventListener("hm:open-right-sidebar", handler);
+		return () => window.removeEventListener("hm:open-right-sidebar", handler);
+	}, [openRightSidebar]);
+
 	// ── Computed widths ─────────────────────────────────────────────────────
 	const effectiveLeftWidth = leftCollapsed ? LEFT_COLLAPSED_WIDTH : leftWidth;
 	const effectiveRightWidth = rightCollapsed ? 0 : rightWidth;
@@ -269,8 +276,8 @@ export function ResizableLayoutWrapper({
 				</div>
 
 				{/* Main content */}
-				<main className="scrollbar-thin h-full min-w-0 flex-1 overflow-y-auto bg-background">
-					<div className="h-full px-4 py-5 lg:px-6">{children}</div>
+				<main className="scrollbar-thin h-full min-w-0 flex-1 overflow-hidden bg-background">
+					{children}
 				</main>
 
 				{/* Right sidebar — relative so the edge handle can be positioned */}
@@ -296,16 +303,16 @@ export function ResizableLayoutWrapper({
 					</div>
 				)}
 
-				{/* AI Assistant FAB — shown when right sidebar is collapsed */}
+				{/* AI Assistant — subtle FAB (Notion-style), shown when right sidebar is collapsed */}
 				{rightCollapsed && (
 					<button
 						type="button"
 						onClick={openRightSidebar}
-						className="fixed bottom-6 right-6 z-50 flex size-12 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 hover:bg-primary/90 active:scale-95"
+						className="fixed bottom-5 right-5 z-50 flex size-13 items-center justify-center rounded-full border border-[#27282B] bg-[#1C1D21] text-[#8A8F98] shadow-md transition-all hover:border-[#5E6AD2]/50 hover:text-[#EEEEEE] hover:shadow-[0_0_24px_rgba(94,106,210,0.35)] active:scale-95"
 						aria-label="Open AI Assistant"
-						title="Open AI Assistant"
+						title="AI Assistant"
 					>
-						<Sparkles className="size-6" />
+						<Sparkles className="size-5" />
 					</button>
 				)}
 			</div>
