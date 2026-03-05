@@ -104,7 +104,7 @@ const SidebarItem = ({
     <div
       onClick={handleContainerClick}
       className={`group flex items-center py-1.25 mx-2 rounded-[5px] cursor-pointer ${active
-        ? "bg-[#26272B] text-[#EEEEEE]"
+        ? "bg-[#1F2023] text-[#EEEEEE]"
         : "text-[#8A8F98] hover:bg-[#26272B] hover:text-[#EEEEEE] transition-colors duration-75"
         } ${isCollapsed ? "justify-center px-0" : "pr-2"}`}
       style={{ paddingLeft: isCollapsed ? undefined : paddingLeft }}
@@ -346,19 +346,47 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
         {/* Journal Section */}
         {!isCollapsed && (
           <div className="space-y-0.5">
-            <SidebarItem
-              label="Journal"
-              isExpandable
-              expanded={expanded["journal"]}
-              onToggle={() => toggle("journal")}
-            />
+            {/* Journal header with hover-reveal create icon (matches Areas pattern) */}
+            <div className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              style={{ paddingLeft: '8px' }}
+            >
+              <div className="flex items-center gap-0" onClick={() => toggle("journal")}>
+                <div className="w-5 flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75">
+                  {expanded["journal"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </div>
+                <span className="text-[13px] font-medium text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75 leading-5">Journal</span>
+              </div>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+                <div
+                  className="p-0.5 hover:bg-[#34353A] rounded-[3px] text-[#8A8F98] hover:text-[#EEEEEE] transition-colors"
+                  title="New journal entry"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // TODO: create new journal entry for today
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
             {expanded["journal"] && (
-              <SidebarItem
-                label="Today's Log"
-                level={1}
-                href={Navigator.journal()}
-                active={isRouteActive(pathname, Navigator.journal())}
-              />
+              <>
+                {/* Only show entries that exist — mock data for now */}
+                {[
+                  { label: "Today", key: "j-today" },
+                  { label: "Yesterday", key: "j-yesterday" },
+                  { label: "Sat, 28 Feb", key: "j-feb28" },
+                ].map((entry) => (
+                  <SidebarItem
+                    key={entry.key}
+                    label={entry.label}
+                    level={1}
+                    href={Navigator.journal()}
+                    active={false}
+                  />
+                ))}
+              </>
             )}
           </div>
         )}

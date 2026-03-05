@@ -1,6 +1,7 @@
 import { prisma } from "@repo/db"
 import { BadRequestError, ConflictError } from "../errors/httpErrors"
 import { hash } from "../utils/hash"
+import { createVerifyEmailToken, sendVerificationEmailToken } from "../utils/email/email"
 
 
 
@@ -53,24 +54,34 @@ export const signupService = async (payload: { email: string, password: string, 
 
 		}
 		)
-		
+
 		await tx.userSetting.create({
-			data:{
-				userId:newUser.id,
-				 onboardingCompleted:false,
-				settings:{} // it refers to the user prefrestaion that we will store 
+			data: {
+				userId: newUser.id,
+				onboardingCompleted: false,
+				settings: {} // it refers to the user prefrestaion that we will store 
 			}
 		})
 
+		return newUser;
+
 	})
 
-	
 
 
 
+	// send verification email 
+	const rawToken = await createVerifyEmailToken(user.id) ; 
+
+	 sendVerificationEmailToken(user.email, rawToken).catch(() =>{
+		throw new ConflictError("There was Problem sending email , Try again.")
+	 })
 
 
 
+return {
+	message:"signup succeful . Verify Your email"
+}
 
 
 }

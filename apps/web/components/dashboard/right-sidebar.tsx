@@ -143,12 +143,12 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 
 	if (isCollapsed) {
 		return (
-			<div className="flex h-full min-h-0 w-full flex-col border-l border-border/80 bg-card px-2 py-3">
+			<div className="flex h-full min-h-0 w-full flex-col border-l border-[#27282B] bg-[#151618] px-2 py-3">
 				<div className="mb-3 flex justify-end">
 					<button
 						type="button"
 						onClick={onToggleCollapse}
-						className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+						className="flex size-8 items-center justify-center rounded-md text-[#8A8F98] transition-colors hover:bg-[#26272B] hover:text-[#EEEEEE]"
 						aria-label="Expand right sidebar"
 						title="Expand sidebar"
 					>
@@ -156,8 +156,8 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 					</button>
 				</div>
 				<div className="flex flex-1 items-center justify-center">
-					<div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-						<Sparkles className="size-5 text-primary" />
+					<div className="flex size-10 items-center justify-center rounded-lg bg-[#1C1D21]">
+						<Sparkles className="size-5 text-[#EEEEEE]" />
 					</div>
 				</div>
 			</div>
@@ -168,10 +168,10 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 		<div className="flex h-full min-h-0 w-full flex-col border-l border-[#27282B] bg-[#151618]">
 			{/* ── Smart Insight Card ──────────────────────────────────── */}
 			<div className="shrink-0 px-3 pt-3 pb-2">
-				<div className="rounded-lg bg-[#1E1F2E] p-3">
+				<div className="rounded-lg bg-[#1C1D21] p-3">
 					<div className="mb-1.5 flex items-center justify-between">
 						<div className="flex items-center gap-1.5">
-							<Sparkles className="size-3.5 text-primary" />
+							<Sparkles className="size-3.5 text-[#EEEEEE]" />
 							<span className="text-xs font-semibold text-[#EEEEEE]">Smart Insight</span>
 						</div>
 						<button
@@ -188,7 +188,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 					<button
 						type="button"
 						onClick={() => window.dispatchEvent(new Event("hm:quick-create/open"))}
-						className="mt-2.5 inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+						className="mt-2.5 inline-flex items-center gap-1 rounded-md bg-[#EEEEEE] px-2.5 py-1 text-[11px] font-semibold text-[#151618] transition-colors hover:bg-[#D9D9D9]"
 					>
 						Create Canvas Draft <ArrowUpRight className="size-3" />
 					</button>
@@ -218,7 +218,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 								className={
 									message.role === "assistant"
 										? "max-w-[85%] rounded-lg rounded-tl-sm bg-[#2A2B30] px-3 py-2 text-[13px] leading-relaxed text-[#DDDDE0]"
-										: "max-w-[85%] rounded-lg rounded-tr-sm bg-primary px-3 py-2 text-[13px] leading-relaxed text-primary-foreground"
+										: "max-w-[85%] rounded-lg rounded-tr-sm bg-[#EEEEEE] px-3 py-2 text-[13px] leading-relaxed text-[#151618]"
 								}
 							>
 								{message.content}
@@ -254,7 +254,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 							}
 						}}
 						placeholder="Talk to your AI partner..."
-						className="w-full rounded-lg border border-[#2A2B30] bg-[#1A1B1E] py-2 pl-3 pr-10 text-[13px] text-[#EEEEEE] placeholder:text-[#5A5A65] transition-colors focus:border-primary/50 focus:outline-none"
+						className="w-full rounded-lg border border-[#2A2B30] bg-[#1A1B1E] py-2 pl-3 pr-10 text-[13px] text-[#EEEEEE] placeholder:text-[#5A5A65] transition-colors focus:border-[#5A5D66] focus:outline-none"
 					/>
 					<button
 						type="button"
@@ -262,7 +262,7 @@ export function RightSidebar({ isCollapsed = false, onToggleCollapse }: RightSid
 							void sendMessage();
 						}}
 						disabled={!input.trim() || isSending}
-						className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+						className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-[#EEEEEE] text-[#151618] transition-colors hover:bg-[#D9D9D9] disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						{isSending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
 					</button>
