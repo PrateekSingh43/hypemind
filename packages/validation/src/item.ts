@@ -18,7 +18,7 @@ const ItemStatusEnum = z.enum([
 ]);
 
 export const createItemSchema = z.object({
-  // ❌ userId REMOVED — comes from auth middleware
+
 
   sectionId: z.string().optional(),
 

@@ -16,7 +16,7 @@ export const hmac = (raw: string) => {
 
 export const generateAccessToken = (userId: string) => {
 	return jwt.sign({ userId }, JWT_SECRET, {
-		algorithm: 'HS256',            // 2. Explicitly define algorithm
+		algorithm: 'HS256',            // 2. Explicitly define algorithm all the thigns will go into the .env for safety
 		expiresIn: '15m',
 		audience: 'my-app-api',        // 3. aud: Who this token is for
 		issuer: 'my-auth-service',     // 4. iss: Who issued the token
@@ -30,7 +30,7 @@ export const generateRefreshToken = async (userId: string) => {
 	const raw = `${userId}.${random}`;
 
 	const tokenHash = hmac(raw);
-	const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+	const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
 	await prisma.refreshToken.create({
 		data: { tokenHash, userId, expiresAt },

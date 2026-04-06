@@ -48,19 +48,7 @@ enum WorkspaceRole {
   MEMBER
 }
 
-model WorkspaceMember {
-  id          String        @id @default(cuid())
-  workspaceId String
-  userId      String
-  role        WorkspaceRole @default(OWNER)
-  joinedAt    DateTime      @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([workspaceId, userId])
-  @@index([userId])
-}
 
 model RefreshToken {
   id        String    @id @default(cuid())
@@ -146,6 +134,22 @@ model Workspace {
   createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }
 
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(OWNER)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+
 model WorkspaceSetting {
   id          String    @id @default(cuid())
   workspaceId String    @unique
@@ -185,6 +189,7 @@ model Project {
   slug        String
   description String?
   status      ProjectStatus @default(ACTIVE)
+ 
 
   items Item[]
 
@@ -230,7 +235,8 @@ model Item {
 
   title String?
   type  ItemType
-
+  stauts  String?
+  parentId String?
   contentJson Json?
   url         String?
   metadata    Json?

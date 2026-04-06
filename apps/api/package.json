@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "start": "node -r dotenv/config dist/index.js",
-    "dev": "pnpm --filter=@repo/db run db:generate && tsx watch --require dotenv/config src/index.ts | pino-pretty",
+    "dev": "pnpm --filter=@repo/db run db:generate && tsx watch src/index.ts | pino-pretty",
     "build": "tsup",
     "check-types": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",

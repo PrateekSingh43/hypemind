@@ -1,6 +1,17 @@
 // apps/api/src/config/env.ts
 import dotenv from "dotenv";
-dotenv.config();
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.resolve(__dirname, "../../.env");
+
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
+
 import { z } from "@repo/validation";
 
 const envSchema = z.object({
@@ -44,9 +55,6 @@ export const VOYAGE_API_KEY:string = parsedEnv.VOYAGE_API_KEY;
 export const JWT_EXP: string = parsedEnv.JWT_EXPIRES_IN;
 export const CLIENT_URL: string = parsedEnv.CLIENT_URL;
 
-
-// --- FIX: Corrected export block ---
-// Remove all optional chaining '?' operators
 
 // Google Related stuff  
 export const GOOGLE_CLIENT_ID: string = parsedEnv.GOOGLE_CLIENT_ID.trim();
