@@ -4,7 +4,6 @@ const API_BASE_URL =
 	"http://localhost:4000/api/v1";
 const REQUEST_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 30000);
 
-const ACCESS_TOKEN_KEY = "hm:access-token:v1";
 const WORKSPACE_ID_KEY = "hm:workspace-id:v1";
 
 let inMemoryAccessToken: string | null = null;
@@ -91,6 +90,48 @@ async function request<T>(
 		globalThis.clearTimeout(timeout);
 	}
 
+	// 401 Interceptor for Silent Refresh
+	if (res.status === 401 && endpoint !== "/auth/login" && endpoint !== "/auth/refresh" && endpoint !== "/auth/signup") {
+		try {
+			const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
+				method: "POST",
+				credentials: "include"
+			});
+			if (refreshRes.ok) {
+				const refreshData = await refreshRes.json();
+				if (refreshData?.data?.accessToken) {
+					setAccessToken(refreshData.data.accessToken);
+					headers.set("Authorization", `Bearer ${refreshData.data.accessToken}`);
+					
+					// Retry original request
+					const retryController = new AbortController();
+					const retryTimeout = globalThis.setTimeout(() => retryController.abort(), timeoutMs);
+					try {
+						res = await fetch(`${API_BASE_URL}${resolveEndpoint(endpoint)}`, {
+							...init,
+							method,
+							credentials: "include",
+							headers,
+							signal: retryController.signal,
+							body: body === undefined ? init?.body : JSON.stringify(body),
+						});
+					} finally {
+						globalThis.clearTimeout(retryTimeout);
+					}
+				}
+			} else {
+				// Refresh token expired or invalid
+				clearAccessToken();
+				clearWorkspaceId();
+				if (canUseStorage()) {
+					window.location.href = "/login";
+				}
+			}
+		} catch (e) {
+			// Ignore error, let it fall through to the default 401 handling
+		}
+	}
+
 	const contentType = res.headers.get("content-type") ?? "";
 	const responsePayload = contentType.includes("application/json")
 		? await res.json()
@@ -112,23 +153,14 @@ async function request<T>(
 
 export function setAccessToken(token: string) {
 	inMemoryAccessToken = token;
-	writeStorage(ACCESS_TOKEN_KEY, token);
 }
 
 export function clearAccessToken() {
 	inMemoryAccessToken = null;
-	writeStorage(ACCESS_TOKEN_KEY, null);
 }
 
 export function getAccessToken() {
-	if (inMemoryAccessToken) {
-		return inMemoryAccessToken;
-	}
-	const stored = readStorage(ACCESS_TOKEN_KEY);
-	if (stored) {
-		inMemoryAccessToken = stored;
-	}
-	return stored;
+	return inMemoryAccessToken;
 }
 
 export function storeWorkspaceId(workspaceId: string) {

@@ -1,126 +1,120 @@
-:root,
-[data-theme="light"] {
-  /* Surfaces */
-  --color-main: #F7F8FB;
-  /* bg-app */
-  --color-sidebar: #FFFFFF;
-  /* bg-sidebar */
-  --color-bg-surface: #FFFFFF;
-  /* bg-surface */
-  --color-hover: #EEF1F6;
-  /* bg-hover */
-  --color-muted: #EEF2F8;
-  /* bg-muted */
-  --color-embedded-block: #EEF2F8;
-  --color-blue-highlight-bg: #F1EEFF;
-  /* Soft purple highlight */
+/* HypeMind design tokens.
+   This is the single source of raw theme values. Runtime theming uses the
+   `.dark` class from next-themes; public Tailwind tokens are mapped in
+   packages/tailwind-config/globals.css. */
 
-  /* Text */
-  --color-text: #111318;
-  /* text-primary */
-  --color-text-secondary: #5F6878;
-  /* text-secondary */
-  --color-text-muted: #8A92A0;
-  /* text-muted */
-  --color-text-inverse: #FFFFFF;
-  --color-placeholder: #8C94A3;
-
-  /* Borders */
-  --color-border-subtle: #E0E4EC;
-  /* border-subtle */
-  --color-border: #D6DCE8;
-  /* border-default */
-
-  /* Brand / Accent */
-  --color-brand: #6F5DF5;
-  /* accent-primary purple */
-  --color-brand-hover: #5D4BE0;
-  /* accent-hover */
-  --color-brand-soft: #ECE8FF;
-  /* accent-soft */
-  --color-on-brand: #FFFFFF;
-
-  /* Status */
-  --color-status-active-bg: #DCFCE7;
-  --color-status-active-text: #166534;
-  --color-danger: #DC2626;
-
-  /* Shadow */
-  --shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.04);
-
-  /* Aliases for compatibility */
-  --color-surface-subtle: var(--color-bg-surface);
-  --color-bg-embed: var(--color-embedded-block);
-  --color-bg-blue: var(--color-blue-highlight-bg);
-}
-
-[data-theme="dark"] {
-  /* Surfaces */
-  --color-main: #111113;
-  /* bg-app */
-  --color-sidebar: #17171A;
-  /* bg-sidebar */
-  --color-bg-surface: #1A1A1E;
-  /* bg-surface */
-  --color-hover: #24242A;
-  /* bg-hover */
-  --color-muted: #202027;
-  /* bg-muted */
-  --color-embedded-block: #202027;
-  --color-blue-highlight-bg: #27233F;
-  /* Soft purple highlight */
-
-  /* Text */
-  --color-text: #F2F2F5;
-  /* text-primary */
-  --color-text-secondary: #B6B6C0;
-  /* text-secondary */
-  --color-text-muted: #9A9AA4;
-  /* text-muted */
-  --color-text-inverse: #111113;
-  --color-placeholder: #9A9AA4;
-
-  /* Borders */
-  --color-border-subtle: #2F2F38;
-  /* border-subtle */
-  --color-border: #3A3A45;
-  /* border-default */
-
-  /* Brand / Accent */
-  --color-brand: #6F5DF5;
-  /* accent-primary purple */
-  --color-brand-hover: #8576FF;
-  /* accent-hover */
-  --color-brand-soft: #26214A;
-  /* accent-soft */
-  --color-on-brand: #FFFFFF;
-
-  /* Status */
-  --color-status-active-bg: #203527;
-  --color-status-active-text: #6EE7B7;
-  --color-danger: #F87171;
-
-  /* Shadow */
-  --shadow-soft: none;
-
-  /* Aliases for compatibility */
-  --color-surface-subtle: var(--color-bg-surface);
-  --color-bg-embed: var(--color-embedded-block);
-  --color-bg-blue: var(--color-blue-highlight-bg);
-}
-
-/* Layout */
 :root {
-  --spacing-xl: 32px;
-  --sidebar-width: 260px;
-  --right-panel-width: 340px;
-  --max-content-width: 1280px;
-  --density-xs: 8px;
-  --density-sm: 12px;
-  --density-md: 16px;
-  --density-lg: 24px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --btn-height: 36px;
+  --hm-color-background: #ffffff;
+  --hm-color-surface: #f9fafb;
+  --hm-color-surface-elevated: #ffffff;
+  --hm-color-panel: #ffffff;
+  --hm-color-sidebar: #f3f4f6;
+
+  --hm-color-foreground: #111827;
+  --hm-color-foreground-muted: #6b7280;
+  --hm-color-foreground-subtle: #9ca3af;
+  --hm-color-foreground-inverse: #ffffff;
+
+  --hm-color-border: #e5e7eb;
+  --hm-color-border-subtle: #f3f4f6;
+  --hm-color-border-strong: #d1d5db;
+
+  --hm-color-primary: #5e6ad2;
+  --hm-color-primary-hover: #4f5abf;
+  --hm-color-primary-soft: #eef0ff;
+  --hm-color-primary-foreground: #ffffff;
+
+  --hm-color-secondary: #f3f4f6;
+  --hm-color-secondary-foreground: #111827;
+  --hm-color-tertiary: transparent;
+  --hm-color-tertiary-foreground: #6b7280;
+  --hm-color-accent: #5e6ad2;
+  --hm-color-accent-foreground: #ffffff;
+
+  --hm-color-success: #22c55e;
+  --hm-color-success-soft: #f0fdf4;
+  --hm-color-warning: #f59e0b;
+  --hm-color-warning-soft: #fffbeb;
+  --hm-color-danger: #ef4444;
+  --hm-color-danger-soft: #fef2f2;
+  --hm-color-danger-foreground: #ffffff;
+  --hm-color-info: #3b82f6;
+  --hm-color-info-soft: #eff6ff;
+
+  --hm-color-input: #ffffff;
+  --hm-color-input-border: #e5e7eb;
+  --hm-color-focus-ring: #5e6ad2;
+
+  --hm-color-editor-bg: #ffffff;
+  --hm-color-editor-text: #374151;
+  --hm-color-editor-code-bg: #f8fafc;
+
+  --hm-color-overlay: #000000;
+  --hm-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --hm-shadow-popover: 0 8px 30px rgba(0, 0, 0, 0.12);
+
+  --hm-spacing-xl: 32px;
+  --hm-sidebar-width: 260px;
+  --hm-right-panel-width: 340px;
+  --hm-max-content-width: 1280px;
+  --hm-density-xs: 8px;
+  --hm-density-sm: 12px;
+  --hm-density-md: 16px;
+  --hm-density-lg: 24px;
+  --hm-radius-sm: 8px;
+  --hm-radius-md: 10px;
+  --hm-radius-lg: 12px;
+  --hm-radius: 0.75rem;
+  --hm-btn-height: 36px;
+}
+
+.dark {
+  --hm-color-background: #0e0f11;
+  --hm-color-surface: #151618;
+  --hm-color-surface-elevated: #1c1d21;
+  --hm-color-panel: #151618;
+  --hm-color-sidebar: #151618;
+
+  --hm-color-foreground: #eeeeee;
+  --hm-color-foreground-muted: #8a8f98;
+  --hm-color-foreground-subtle: #5a5d66;
+  --hm-color-foreground-inverse: #0e0f11;
+
+  --hm-color-border: #27282b;
+  --hm-color-border-subtle: #1f2023;
+  --hm-color-border-strong: #34353a;
+
+  --hm-color-primary: #5e6ad2;
+  --hm-color-primary-hover: #4b56b2;
+  --hm-color-primary-soft: #1e1f35;
+  --hm-color-primary-foreground: #ffffff;
+
+  --hm-color-secondary: #26272b;
+  --hm-color-secondary-foreground: #eeeeee;
+  --hm-color-tertiary: transparent;
+  --hm-color-tertiary-foreground: #8a8f98;
+  --hm-color-accent: #5e6ad2;
+  --hm-color-accent-foreground: #ffffff;
+
+  --hm-color-success: #34d399;
+  --hm-color-success-soft: #052e16;
+  --hm-color-warning: #fbbf24;
+  --hm-color-warning-soft: #451a03;
+  --hm-color-danger: #f87171;
+  --hm-color-danger-soft: #2d1215;
+  --hm-color-danger-foreground: #ffffff;
+  --hm-color-info: #60a5fa;
+  --hm-color-info-soft: #172554;
+
+  --hm-color-input: #1a1b1e;
+  --hm-color-input-border: #2a2b30;
+  --hm-color-focus-ring: #5e6ad2;
+
+  --hm-color-editor-bg: #0e0f11;
+  --hm-color-editor-text: #a0a5b0;
+  --hm-color-editor-code-bg: #131416;
+
+  --hm-color-overlay: #000000;
+  --hm-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --hm-shadow-popover: 0 8px 30px rgba(0, 0, 0, 0.5);
 }

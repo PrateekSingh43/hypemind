@@ -1,12 +1,16 @@
 //C:\Users\prate\Hypemind\apps\api\src\index.ts
 
-import app from './app';
+
 
 import { port } from './config/env';
+import { logger } from './utils/logger';
+import app from './app';
 
 
 
-app.listen(port , () =>{
-	console.log("listening on the port " , port)
-}) 
+
+
+app.listen(port, () => {
+	logger.info({ port }, "api server listening")
+})
 

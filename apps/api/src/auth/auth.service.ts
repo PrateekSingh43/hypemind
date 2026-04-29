@@ -1,47 +1,42 @@
 import { Prisma, prisma } from "@repo/db"
 import { BadRequestError, ConflictError, ForbiddenError, UnauthorizedError } from "../errors/httpErrors"
 import { hash, verifyPassword } from "../utils/hash"
-import { createVerifyEmailToken, sendVerificationEmailToken } from "../utils/email/email"
+import { createVerifyEmailToken, sendPasswordResetEmail, sendVerificationEmailToken } from "../utils/email/email"
 import { generateUniqueSlug, generateWorkspaceData } from "../utils/workspace"
 
-import { generateAccessToken, generateRefreshToken, setRefreshToken } from "../utils/token"
-import { onboardingSchema } from "@repo/validation"
+import { createPasswordResetToken, generateAccessToken, generateRefreshToken, setRefreshToken, verifyPasswordResetToken, verifyRefreshToken } from "../utils/token"
+
 import crypto from "crypto"
-import { EMAIL_SECRET } from "../config/env"
-import { access } from "fs"
+import { EMAIL_SECRET, REFRESH_COOKIE_NAME } from "../config/env"
+
+import { logger } from "../utils/logger"
 
 
-
-
-
-
-
-export const signupService = async (payload: { email: string, password: string }) => {
+export const signupService = async (payload: { email: string, password: string, fullName: string }) => {
 
 	if (!payload) {
 		throw new BadRequestError(
-			"User data is missing"
-		)
+			"Email and Password required"
+		);
 	}
 
-	const { email, password } = payload
+	const { email, password, fullName } = payload
 
 	// cleaning the email . 
-
+	console.log("o : just before the everything only the getting the payload ", process.hrtime.bigint())
 	const cleanEmail = email.trim().toLowerCase();
+	console.log("1: just after the cleaningEmail ", process.hrtime.bigint())
 
-	const exitingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
+	const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
 
-	if (exitingUser) {
-		throw new ConflictError("user Exits Please login");
+	console.log("2:After the prisma.user.findUnique", process.hrtime.bigint())
 
+	if (existingUser) {
+		throw new ConflictError("Email already registered. Please login");
 	}
 
-	if (!password || password.length < 7) {
-		throw new BadRequestError("Either password is not there or wrong");
 
-	}
-
+	console.log("time before hashing", process.hrtime.bigint())
 	const hashPassword = await hash(password);
 
 	if (!hashPassword) {
@@ -49,19 +44,22 @@ export const signupService = async (payload: { email: string, password: string }
 
 
 	}
-	/*
- Create user
-Create workspace
-Create workspace member (admin)
-Create userSettings
-Send verification email */
+	console.log("time after hashing", process.hrtime.bigint());
 
+
+
+
+
+	console.log(
+		"Time before the whole transcation ", process.hrtime.bigint()
+	)
 	const user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
 		const newUser = await tx.user.create({
 
 
 			data: {
 				email: cleanEmail,
+				name: fullName,
 				passwordHash: hashPassword,
 				emailVerified: false,
 			}
@@ -79,7 +77,7 @@ Send verification email */
 			}
 
 		})
-		const workspaceMember = await tx.workspaceMember.create({
+		await tx.workspaceMember.create({
 			data: {
 				workspaceId: workspace.id,
 				userId: newUser.id
@@ -87,13 +85,11 @@ Send verification email */
 			}
 		})
 
-		const workspaceSetting = await tx.workspaceSetting.create({
+		await tx.workspaceSetting.create({
 			data: {
 				workspaceId: workspace.id,
 				prefs: {}
-				/*// for now it is good but later nened to be changes so for that->
-				1. migrate to explicit defaults (e.g., locale, timezone, darkMode) when you know needed fields eg:prefs: { locale: "en-US", timezone: "UTC", darkMode: false }
-				2.if prefs expands to user-controlled values, validate to prevent invalid injection/overwrite*/
+
 			}
 		})
 
@@ -102,7 +98,7 @@ Send verification email */
 			data: {
 				userId: newUser.id,
 				onboardingCompleted: false,
-				settings: {} // it refers to the user prefrestaion that we will store and adde on the onboariding time or may be automatically .
+				settings: {}
 			}
 		})
 
@@ -115,14 +111,17 @@ Send verification email */
 
 	})
 
+	console.log(
+		"time after the full transaction", process.hrtime.bigint()
+	)
 
 
-
-	// send verification email 
+	console.log("3:Before create verify email token", process.hrtime.bigint())
 	const rawToken = await createVerifyEmailToken(user.userId);
 
+	console.log("4:After create verifyEmail Token", process.hrtime.bigint())
 	await sendVerificationEmailToken(user.email, rawToken)
-
+	console.log("5: after sendverification email token", process.hrtime.bigint())
 	return {
 		emailverify: user.emailVerified,
 		onboardingVerify: user.onboardingCompleted,
@@ -130,9 +129,6 @@ Send verification email */
 		email: user.email,
 		message: "signup succeful . Verify Your email"
 	}
-
-
-
 
 
 }
@@ -189,7 +185,7 @@ export async function verifyEmailService(rawToken: string, res: any) {
 export async function resendEmailService(email: string) {
 
 	if (!email) {
-		throw new BadRequestError("User not found")
+		throw new BadRequestError("Email is required")
 	};
 
 	// is this cleaning of the email is unncessary step or not. 
@@ -197,16 +193,20 @@ export async function resendEmailService(email: string) {
 
 	const user = await prisma.user.findUnique({ where: { email: cleanEmail } })
 
-	if (!user || !user.isActive || user.createdAt < new Date()) {
-		throw new UnauthorizedError("User not exit please create Account")
+	if (!user || !user.isActive) {
+		return { message: "If email exists, verification link sent" };
 
 	}
+	if (user.emailVerified) {
+		throw new ConflictError("Email already verified");
+	}
 
-	const token = await createVerifyEmailToken(user.email);
+
+	const token = await createVerifyEmailToken(user.id);
 
 	await sendVerificationEmailToken(user.email, token)
 
-	return { message: "Email Sent Succefully " }
+	return { message: "Verification email sent" };
 
 }
 
@@ -226,25 +226,21 @@ export async function loginService(payload: { email: string, password: string },
 
 	}
 
-	// password check and length check. 
 
-	if (!password || password.length < 7) {
-		throw new BadRequestError("Either password is not there or wrong");
-
+	let PasswrodVerify = false;
+	try {
+		if (exitingUser.passwordHash.startsWith("$argon2")) {
+			PasswrodVerify = await verifyPassword(exitingUser.passwordHash, password);
+		}
+	} catch (e) {
+		PasswrodVerify = false;
 	}
-
-	// compare password 
-	/* above i have added a comparisoon so exitingUser.password null part is removed and becomes mandotroy filed and also it has become but and we have to make the passwordhash as the optional filed as oAuth does not have that so what i did is a good thing or not */
-	const PasswrodVerify = await verifyPassword(exitingUser.passwordHash, password)
 
 	if (!PasswrodVerify) {
-		throw new ForbiddenError(
-
-			"Password is wrong try again"
-		)
+		throw new ForbiddenError("Password is wrong try again");
 	}
 
-	// access token generation i guess also the generatation of the refersh token and saving of that as well . 
+
 
 	const accessToken = generateAccessToken(exitingUser.id)
 
@@ -257,5 +253,141 @@ export async function loginService(payload: { email: string, password: string },
 	}
 }
 
+// forgot Password Service
+
+export async function forgotPasswordService(email: string, ip: string) {
+
+	const cleaned = email.trim().toLowerCase();
+
+
+	const user = await prisma.user.findUnique({ where: { email: cleaned } })
+
+
+
+	if (/[,\n\r;]/.test(cleaned) || cleaned.split(/\s+/).length > 1) {
+		// log suspicious input for review
+		logger.warn({ ip, input: cleaned }, "forgot-password:  injection attempt");
+		throw new BadRequestError("Invalid email format");
+	}
+
+
+	if (!user || !user.isActive || !user.emailVerified || user.createdAt > new Date()) {
+		throw new ConflictError("If email exits , password reset Insturuction sent")
+	}
+
+	// creating the verifiable email Token 
+	const token = await createPasswordResetToken(user.id);
+
+	await sendPasswordResetEmail(token, cleaned);
+
+
+	return { message: "If email exists, password reset instructions sent" };
+
+}
+
+export async function resetPasswordService(rawToken: string, newPassword: string, ip: string, res: any) {
+	// compaines take password multiple time should we also do that if yes then why because i don't see any need for our use case .
+
+	if (!rawToken || !newPassword ) {
+
+		throw new BadRequestError("Token , Password and Email are required");
+	}
+
+	const verify = await verifyPasswordResetToken(rawToken);
+
+	if (!verify) {
+		logger.warn({ ip }, "Reset-password: invalid token");
+		throw new BadRequestError("Invalid or expired reset token");
+	}
+
+	const password = await hash(newPassword);
+
+	const updatedUser = await prisma.user.update({ data: { passwordHash: password }, where: { id: verify.userId } })
+
+	if (!updatedUser) {
+		throw new BadRequestError("Failed to update password. Try again");
+	}
+
+
+	await prisma.refreshToken.deleteMany({ where: { userId: verify.userId } })
+
+
+	const accesToken = generateAccessToken(updatedUser.id);
+
+	const { raw, expiresAt } = await generateRefreshToken(updatedUser.id)
+
+	setRefreshToken(res, raw, expiresAt)
+
+	return {
+		accesToken,
+		user: {
+			id: updatedUser.id,
+			email: updatedUser.email,
+			emailverified: updatedUser.emailVerified,
+		}
+	}
+
+
+}
+
+
+
+export async function refreshTokenService(rawToken: string, userId: string, res: any) {
+
+	const token = await verifyRefreshToken(rawToken)
+	if (!token) {
+		throw new ConflictError("Token not match , Try to re login");
+
+	};
+
+
+	const user = await prisma.user.findUnique({ where: { id: userId } })
+
+	if (!user || !user.isActive || user.createdAt > new Date()) {
+		throw new ConflictError("User Did not found Trying Creating an account")
+	};
+
+	const accessToken = generateAccessToken(user.id);
+
+
+
+
+
+
+	await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+		const { raw, expiresAt } = await generateRefreshToken(user.id);
+		const updateToken = await tx.refreshToken.delete({ where: { id: token.id } });
+
+		if (!updateToken) {
+			throw new BadRequestError("Something went wrong");
+		}
+
+		setRefreshToken(res, raw, expiresAt)
+
+	});
+
+
+
+
+
+
+	return {
+		accessToken,
+		user: {
+			id: user.id,
+			email: user.email,
+			emailVerified: user.emailVerified,
+
+
+		}
+	}
+
+}
+
+
+export async function logoutService(userId: string, res: any) {
+	await prisma.refreshToken.deleteMany({ where: { userId } })
+	res.clearCookie(REFRESH_COOKIE_NAME, { path: "/" });
+}
 
 

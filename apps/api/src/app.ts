@@ -2,8 +2,10 @@ import express, { type Express } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
+import route from "./routes"
 
 import { globalErrorHandler } from "./middlewares/middleware.globalErrorHandler";
+import { requestLogger } from "./utils/logger";
 
 const app: Express = express();
 
@@ -19,14 +21,15 @@ app.use(cors({
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
+app.use(requestLogger);
 app.use(cookieParser());
 app.use(express.json());
 
 // 3. Routes
+app.use(route)
 
 
-// 4. Health Check
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
 
 // 5. Global error handler (must be last)
 app.use(globalErrorHandler);

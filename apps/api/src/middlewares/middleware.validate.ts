@@ -6,7 +6,7 @@ export const validateSchema = <T>(schmea: ZodType<T>) => (req: Request, res: Res
 	const result = schmea.safeParse(req.body);
 
 	if (!result.success) {
-		return res.status(422).json({ error: z.treeifyError(result.error) });
+		return res.status(422).json({ message: result.error.issues.map((i: any) => i.message).join(", ") });
 
 	}
 

@@ -29,67 +29,10 @@ type InboxItem = {
   tags?: string[];
 };
 
-// ── Mock Data (UI preview) ─────────────────────────────────────────────────────
-const MOCK_ITEMS: InboxItem[] = [
-  {
-    id: '1',
-    title: 'Product Direction Canvas',
-    type: 'note',
-    updatedAt: new Date(Date.now() - 42 * 60000).toISOString(),
-    content: 'Render UI before state sync when minimum required state is present. This prevents the blocking spinner on iOS startup.',
-    tags: ['ui', 'performance']
-  },
-  {
-    id: '2',
-    title: 'API edge cases',
-    type: 'link',
-    updatedAt: new Date(Date.now() - 60 * 60000).toISOString(),
-    content: 'Need to handle 404s gracefully without showing red banners on the frontend. Ensure the fetch wrapper catches and maps to empty states.',
-    tags: ['backend']
-  },
-  {
-    id: '3',
-    title: '',
-    type: 'journal',
-    updatedAt: new Date(Date.now() - 120 * 60000).toISOString(),
-    content: 'Thinking about how the placement panel should work. It needs to be instant. No dropdowns if possible, just inline assignments.',
-    tags: []
-  },
-  {
-    id: '4',
-    title: 'Design token audit',
-    type: 'canvas',
-    updatedAt: new Date(Date.now() - 180 * 60000).toISOString(),
-    content: 'Review all color tokens across the design system. Several components are using hardcoded values instead of tokens.',
-    tags: ['design', 'ui']
-  },
-  {
-    id: '5',
-    title: 'Auth flow improvements',
-    type: 'note',
-    updatedAt: new Date(Date.now() - 300 * 60000).toISOString(),
-    content: 'The login redirect after signup is broken on Safari. Need to investigate cookie handling with SameSite=None.',
-    tags: ['bug', 'backend']
-  },
-  {
-    id: '6',
-    title: 'Sprint retro notes',
-    type: 'note',
-    updatedAt: new Date(Date.now() - 24 * 60 * 60000).toISOString(),
-    content: 'Team velocity is stable. Main concern is tech debt around the inbox module. Consider dedicating a sprint to cleanup.',
-    tags: ['planning']
-  },
-];
 
-const MOCK_PROJECTS = [
-  { id: 'p1', name: 'HypeMind Dashboard', recent: true },
-  { id: 'p2', name: 'AI Core Features', recent: true },
-  { id: 'p3', name: 'Landing Page v2', recent: true },
-  { id: 'p4', name: 'Moving Checklist', recent: false },
-  { id: 'p5', name: 'Q3 OKRs', recent: false },
-];
 
-const INITIAL_TAGS = ['ui', 'performance', 'backend', 'design', 'planning', 'bug', 'urgent'];
+
+
 
 const TYPE_OPTIONS = [
   { value: 'all', label: 'All Types' },
@@ -98,6 +41,8 @@ const TYPE_OPTIONS = [
   { value: 'canvas', label: 'Canvas', icon: Layout },
   { value: 'journal', label: 'Journal', icon: Book },
 ];
+
+const PROJECTS: { id: string, name: string, recent: boolean }[] = [];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const getIcon = (type: string) => {
@@ -125,7 +70,7 @@ function formatRelativeTime(dateISO: string) {
 }
 
 // ── Storage ────────────────────────────────────────────────────────────────────
-const LIST_COLLAPSED_KEY = "hm:unsorted:list-collapsed:v1";
+const LIST_COLLAPSED_KEY = "hm:inbox:list-collapsed:v1";
 
 function readListCollapsed(): boolean {
   try {
@@ -144,22 +89,26 @@ function writeListCollapsed(collapsed: boolean) {
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
-export default function UnsortedPage() {
+export default function InboxPage() {
   const router = useRouter();
-  const [items, setItems] = useState<InboxItem[]>(MOCK_ITEMS);
+  const [items, setItems] = useState<InboxItem[]>([]);
   const [loading] = useState(false);
 
-  const [selectedId, setSelectedId] = useState<string | null>(MOCK_ITEMS[0].id);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [projectPopoverOpen, setProjectPopoverOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
 
-  const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [tagSearch, setTagSearch] = useState('');
 
   const [toast, setToast] = useState<{ visible: boolean; message: string; projectName: string; projectId?: string } | null>(null);
   const [listCollapsed, setListCollapsed] = useState(false);
+
+  useEffect(() => {
+    setListCollapsed(readListCollapsed());
+  }, []);
 
   // ── Filter state ───────────────────────────────────────────────────────
   const [filterOpen, setFilterOpen] = useState(false);
@@ -296,7 +245,7 @@ export default function UnsortedPage() {
     setTagSearch('');
   };
 
-  const filteredProjects = MOCK_PROJECTS.filter(p =>
+  const filteredProjects = PROJECTS.filter(p =>
     p.name.toLowerCase().includes(projectSearch.toLowerCase())
   );
   const recentProjects = filteredProjects.filter(p => p.recent);
@@ -346,7 +295,7 @@ export default function UnsortedPage() {
         {/* List panel header with title, filter toggle, and collapse button */}
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#27282B]/50 shrink-0 gap-2">
           <span className="text-[13px] font-semibold text-[#EEEEEE] truncate">
-            Unsorted
+            Inbox
             <span className="ml-1.5 text-[11px] font-normal text-[#5A5D66]">{filteredItems.length}</span>
           </span>
           <div className="flex items-center gap-1">
@@ -547,6 +496,27 @@ export default function UnsortedPage() {
       {/* ── Main Content Area ────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#0E0F11]">
 
+        {/* Breadcrumb bar */}
+        <div className="h-12 border-b border-[#27282B] flex items-center px-6 shrink-0">
+          <div className="flex items-center gap-2 text-[13px] font-medium text-[#8A8F98]">
+            {listCollapsed && (
+              <button
+                onClick={toggleListPanel}
+                className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
+                title="Expand list panel"
+              >
+                <PanelLeft className="w-4 h-4" />
+              </button>
+            )}
+            <span>Inbox</span>
+            {selectedItem && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5" />
+                <span className="text-[#EEEEEE]">Processing</span>
+              </>
+            )}
+          </div>
+        </div>
 
         {!selectedItem ? (
           <div className="flex-1 flex items-center justify-center">
@@ -556,24 +526,6 @@ export default function UnsortedPage() {
           </div>
         ) : (
           <>
-            {/* Breadcrumb bar */}
-            <div className="h-12 border-b border-[#27282B] flex items-center px-6 shrink-0">
-              <div className="flex items-center gap-2 text-[13px] font-medium text-[#8A8F98]">
-                {listCollapsed && (
-                  <button
-                    onClick={toggleListPanel}
-                    className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
-                    title="Expand list panel"
-                  >
-                    <PanelLeft className="w-4 h-4" />
-                  </button>
-                )}
-                <span>Unsorted</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-                <span className="text-[#EEEEEE]">Processing</span>
-              </div>
-            </div>
-
             {/* Detail content */}
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-3xl mx-auto px-8 py-8">

@@ -19,9 +19,9 @@ import {
   Trash,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@repo/ui/lib/utils";
+
 import { Navigator } from "../../lib/navigator";
-import { api, resolveWorkspaceId } from "../../lib/api";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -313,9 +313,9 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
           />
           <SidebarItem
             icon={Inbox}
-            label="Unsorted"
-            href={Navigator.unsorted()}
-            active={isRouteActive(pathname, Navigator.unsorted())}
+            label="Inbox"
+            href={Navigator.inbox()}
+            active={isRouteActive(pathname, Navigator.inbox())}
             isCollapsed={isCollapsed}
           />
         </div>

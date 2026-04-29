@@ -2,9 +2,16 @@ import { Router } from "express";
 import { prisma } from "@repo/db";
 
 
+import authRoute  from "./auth/auth.route";
+
+
+
 const router: Router = Router();
 
 
+
+
+router.use("/api/v1/auth", authRoute)
 
 
 
@@ -27,3 +34,5 @@ router.get("/api/v1/health/smoke", async (_req, res, next) => {
 	}
 });
 
+
+export default router ; 

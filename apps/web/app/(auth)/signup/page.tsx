@@ -5,12 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
+import { Button } from "@repo/ui/components/button";
+import { Input } from "@repo/ui/components/input";
+import { Field } from "@repo/ui/components/field";
+import { Alert } from "@repo/ui/components/alert";
+import { api } from "../../lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api/v1";
+
+
 
 export default function SignupPage() {
 	const router = useRouter();
-	const [name, setName] = useState("");
+	const [fullName, setfullName] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [showPassword, setShowPassword] = useState(false);
@@ -22,7 +28,7 @@ export default function SignupPage() {
 		e.preventDefault();
 		setError("");
 
-		if (!name.trim()) {
+		if (!fullName.trim()) {
 			setError("Name is required");
 			return;
 		}
@@ -30,7 +36,7 @@ export default function SignupPage() {
 			setError("Email is required");
 			return;
 		}
-		if (password.length < 8) {
+		if (password.length <= 8) {
 			setError("Password must be at least 8 characters");
 			return;
 		}
@@ -38,19 +44,15 @@ export default function SignupPage() {
 		setIsLoading(true);
 
 		try {
-			const res = await fetch(`${API_BASE}/auth/register`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
-			});
+			const data = await api.post<{data?:{
+				devVerificationToken?:string}} >("/auth/signup", {
+				fullName: fullName.trim(),
+				email: email.trim().toLowerCase(),
+				password,
+			}); 
 
-			const data = await res.json();
+			const devVerificationToken = data?.data?.devVerificationToken;
 
-			if (!res.ok) {
-				throw new Error(data.message || "Something went wrong");
-			}
-
-			const devVerificationToken = data?.data?.devVerificationToken as string | undefined;
 			if (devVerificationToken) {
 				router.push(`/verify-email?token=${encodeURIComponent(devVerificationToken)}`);
 				return;
@@ -71,38 +73,39 @@ export default function SignupPage() {
 				animate={{ opacity: 1, scale: 1 }}
 				className="text-center"
 			>
-				<div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-					<CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+				<div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-success-soft">
+					<CheckCircle2 className="h-8 w-8 text-success" />
 				</div>
-				<h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-3">
+				<h2 className="text-2xl font-bold text-foreground mb-3">
 					Check your email
 				</h2>
-				<p className="text-zinc-600 dark:text-zinc-400 mb-6 max-w-sm mx-auto">
+				<p className="text-foreground-muted mb-6 max-w-sm mx-auto">
 					We've sent a verification link to{" "}
-					<span className="font-medium text-zinc-900 dark:text-white">{email}</span>.
+					<span className="font-medium text-foreground">{email}</span>.
 					Click the link to activate your account.
 				</p>
 				<div className="space-y-3">
-					<button
+					<Button
 						onClick={() => router.push("/login")}
-						className="w-full h-11 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-medium text-sm hover:opacity-90 transition-opacity"
+						size="lg"
+						className="w-full"
 					>
 						Go to Login
-					</button>
-					<button
+					</Button>
+					<Button
+						variant="secondary"
+						size="lg"
+						className="w-full"
 						onClick={async () => {
 							try {
-								await fetch(`${API_BASE}/auth/resend-verification`, {
-									method: "POST",
-									headers: { "Content-Type": "application/json" },
-									body: JSON.stringify({ email }),
+								await api.post("/auth/resend-verification", {
+									email: email.trim().toLowerCase()
 								});
 							} catch { }
 						}}
-						className="w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
 					>
 						Resend verification email
-					</button>
+					</Button>
 				</div>
 			</motion.div>
 		);
@@ -110,10 +113,10 @@ export default function SignupPage() {
 
 	return (
 		<div>
-			<h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">
+			<h2 className="text-2xl font-bold text-foreground mb-2">
 				Create your account
 			</h2>
-			<p className="text-zinc-600 dark:text-zinc-400 mb-8">
+			<p className="text-foreground-muted mb-8">
 				Start organizing your second brain in seconds.
 			</p>
 
@@ -122,35 +125,27 @@ export default function SignupPage() {
 					<motion.div
 						initial={{ opacity: 0, y: -8 }}
 						animate={{ opacity: 1, y: 0 }}
-						className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400"
 					>
-						{error}
+						<Alert variant="danger">{error}</Alert>
 					</motion.div>
 				)}
 
 				{/* Name */}
-				<div>
-					<label htmlFor="name" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-						Full name
-					</label>
-					<input
-						id="name"
+				<Field label="Full name" htmlFor="fullName">
+					<Input
+						id="fullName"
 						type="text"
-						autoComplete="name"
+						autoComplete="fullName"
 						required
-						value={name}
-						onChange={(e) => setName(e.target.value)}
+						value={fullName}
+						onChange={(e) => setfullName(e.target.value)}
 						placeholder="John Doe"
-						className="w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 px-4 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white/20 focus:border-transparent transition-shadow"
 					/>
-				</div>
+				</Field>
 
 				{/* Email */}
-				<div>
-					<label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-						Email address
-					</label>
-					<input
+				<Field label="Email address" htmlFor="email">
+					<Input
 						id="email"
 						type="email"
 						autoComplete="email"
@@ -158,17 +153,13 @@ export default function SignupPage() {
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
 						placeholder="john@example.com"
-						className="w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 px-4 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white/20 focus:border-transparent transition-shadow"
 					/>
-				</div>
+				</Field>
 
 				{/* Password */}
-				<div>
-					<label htmlFor="password" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-						Password
-					</label>
+				<Field label="Password" htmlFor="password">
 					<div className="relative">
-						<input
+						<Input
 							id="password"
 							type={showPassword ? "text" : "password"}
 							autoComplete="new-password"
@@ -176,41 +167,37 @@ export default function SignupPage() {
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
 							placeholder="At least 8 characters"
-							className="w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 px-4 pr-11 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white/20 focus:border-transparent transition-shadow"
+							className="pr-11"
 						/>
 						<button
 							type="button"
 							onClick={() => setShowPassword(!showPassword)}
-							className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+							className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-subtle hover:text-foreground-muted transition-colors"
 						>
 							{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
 						</button>
 					</div>
 					{password.length > 0 && (
 						<div className="mt-2 flex items-center gap-2">
-							<div className="flex-1 h-1 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
+							<div className="flex-1 h-1 rounded-full overflow-hidden bg-border">
 								<div
 									className={`h-full rounded-full transition-all ${password.length >= 12
-											? "w-full bg-emerald-500"
-											: password.length >= 8
-												? "w-2/3 bg-amber-500"
-												: "w-1/3 bg-red-500"
+										? "w-full bg-success"
+										: password.length >= 8
+											? "w-2/3 bg-warning"
+											: "w-1/3 bg-danger"
 										}`}
 								/>
 							</div>
-							<span className="text-xs text-zinc-500">
+							<span className="text-xs text-foreground-subtle">
 								{password.length >= 12 ? "Strong" : password.length >= 8 ? "Good" : "Weak"}
 							</span>
 						</div>
 					)}
-				</div>
+				</Field>
 
 				{/* Submit */}
-				<button
-					type="submit"
-					disabled={isLoading}
-					className="w-full h-11 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
-				>
+				<Button type="submit" disabled={isLoading} size="lg" className="w-full">
 					{isLoading ? (
 						<>
 							<Loader2 className="h-4 w-4 animate-spin" />
@@ -219,22 +206,18 @@ export default function SignupPage() {
 					) : (
 						"Create account"
 					)}
-				</button>
+				</Button>
 			</form>
 
 			{/* Divider */}
 			<div className="my-6 flex items-center gap-3">
-				<div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
-				<span className="text-xs text-zinc-400">or</span>
-				<div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-700" />
+				<div className="flex-1 h-px bg-border" />
+				<span className="text-xs text-foreground-subtle">or</span>
+				<div className="flex-1 h-px bg-border" />
 			</div>
 
 			{/* Google OAuth placeholder */}
-			<button
-				type="button"
-				disabled
-				className="w-full h-11 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
-			>
+			<Button type="button" variant="secondary" size="lg" className="w-full" disabled>
 				<svg className="h-4 w-4" viewBox="0 0 24 24">
 					<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
 					<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -242,12 +225,12 @@ export default function SignupPage() {
 					<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
 				</svg>
 				Continue with Google (coming soon)
-			</button>
+			</Button>
 
 			{/* Login link */}
-			<p className="mt-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
+			<p className="mt-6 text-center text-sm text-foreground-muted">
 				Already have an account?{" "}
-				<Link href="/login" className="font-medium text-zinc-900 dark:text-white hover:underline">
+				<Link href="/login" className="font-medium text-foreground hover:underline">
 					Sign in
 				</Link>
 			</p>

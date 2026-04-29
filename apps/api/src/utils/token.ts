@@ -64,20 +64,26 @@ export const setRefreshToken = (res: Response, raw: string, expiresAt: Date) => 
 		secure: NODE_ENV === "production",
 		sameSite: NODE_ENV === "production" ? "none" : "lax",
 		maxAge: expiresAt.getTime() - Date.now(),
-		path: "/api/v1/auth"
-
+		path: "/"
 	})
 
 }
 
 
-export const verifyRefreshToken = async (raw: string) => {
-	const tokenHash = hmac(raw);
+export const verifyRefreshToken = async (rawToken: string) => {
+	const tokenHash = hmac(rawToken);
 
 	const tokenRecord = await prisma.refreshToken.findUnique({ where: { tokenHash } })
 
 	if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
-		return
+
+		if (!tokenRecord) {
+			return null;
+		}
+		if (tokenRecord.expiresAt < new Date()) {
+			await prisma.refreshToken.delete({ where: { tokenHash } });
+		}
+		return null;
 	}
 
 	return tokenRecord;
@@ -90,7 +96,7 @@ export const createPasswordResetToken = async (userId: string) => {
 	// raw token contains userId to bind token to a user and prevent guessing
 	const raw = `${userId}.${crypto.randomBytes(48).toString("hex")}`;
 	const tokenHash = crypto
-		.createHmac("sha256", PASSWORD_RESET_SECRET)
+		.createHmac("sha-256", PASSWORD_RESET_SECRET)
 		.update(raw)
 		.digest("hex");
 	const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
@@ -108,17 +114,23 @@ export const createPasswordResetToken = async (userId: string) => {
 
 
 export const verifyPasswordResetToken = async (rawToken: string) => {
-	const tokenHash = crypto
-		.createHmac("sha256", PASSWORD_RESET_SECRET)
-		.update(rawToken)
-		.digest("hex");
+    const tokenHash = crypto
+        .createHmac("sha-256", PASSWORD_RESET_SECRET)  // Fixed: consistent hash
+        .update(rawToken)
+        .digest("hex");
 
-	const tokenRecord = await prisma.passwordResetToken.findUnique({
-		where: { tokenHash },
-	});
+    const tokenRecord = await prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+    });
 
-	if (!tokenRecord) return null;
-	if (tokenRecord.expiresAt < new Date()) return null;
-	return tokenRecord; // contains userId and tokenHash
+    if (!tokenRecord) return null;
+    if (tokenRecord.expiresAt < new Date()) return null;
+    
+    
+    if (tokenRecord.usedAt !== null) return null;
+
+    
+
+    return {userId:tokenRecord.userId};
 };
 

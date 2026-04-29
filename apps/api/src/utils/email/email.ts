@@ -55,7 +55,7 @@ export const sendVerificationEmailToken = async (email: string, rawToken: string
 
 
 export const sendPasswordResetEmail = async (rawToken: string, email: string) => {
-	const url = `${CLIENT_URL}/password-reset?token=${encodeURIComponent(rawToken)}`;
+	const url = `${CLIENT_URL}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
 	await resend.emails.send({
 		from: process.env.RESEND_PASSWORD_RESET_ID!,

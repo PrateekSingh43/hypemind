@@ -3,28 +3,92 @@
 @plugin "tailwindcss-animate";
 @source "../../packages/ui/src";
 @source "../../apps/web/app";
+@source "../../apps/web/components";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
-  /* Map to CSS variables */
-  --color-background: var(--color-main);
-  --color-foreground: var(--color-text);
-  --color-muted: var(--color-bg-surface);
-  --color-border: var(--color-border-subtle);
-  --color-input: var(--color-border-subtle);
-  --color-ring: var(--color-brand);
-  --color-primary: var(--color-brand);
-  --color-primary-foreground: var(--color-on-brand);
-}
+  --color-background: var(--hm-color-background);
+  --color-surface: var(--hm-color-surface);
+  --color-surface-elevated: var(--hm-color-surface-elevated);
+  --color-panel: var(--hm-color-panel);
+  --color-sidebar: var(--hm-color-sidebar);
 
-@layer base {
-  body {
-    background-color: var(--color-main);
-    color: var(--color-text);
-    font-family: var(--font-sans);
-  }
+  --color-foreground: var(--hm-color-foreground);
+  --color-foreground-muted: var(--hm-color-foreground-muted);
+  --color-foreground-subtle: var(--hm-color-foreground-subtle);
+  --color-foreground-inverse: var(--hm-color-foreground-inverse);
+
+  --color-border: var(--hm-color-border);
+  --color-border-subtle: var(--hm-color-border-subtle);
+  --color-border-strong: var(--hm-color-border-strong);
+
+  --color-primary: var(--hm-color-primary);
+  --color-primary-hover: var(--hm-color-primary-hover);
+  --color-primary-soft: var(--hm-color-primary-soft);
+  --color-primary-foreground: var(--hm-color-primary-foreground);
+
+  --color-secondary: var(--hm-color-secondary);
+  --color-secondary-foreground: var(--hm-color-secondary-foreground);
+  --color-tertiary: var(--hm-color-tertiary);
+  --color-tertiary-foreground: var(--hm-color-tertiary-foreground);
+  --color-accent: var(--hm-color-accent);
+  --color-accent-foreground: var(--hm-color-accent-foreground);
+
+  --color-success: var(--hm-color-success);
+  --color-success-soft: var(--hm-color-success-soft);
+  --color-warning: var(--hm-color-warning);
+  --color-warning-soft: var(--hm-color-warning-soft);
+  --color-danger: var(--hm-color-danger);
+  --color-danger-soft: var(--hm-color-danger-soft);
+  --color-danger-foreground: var(--hm-color-danger-foreground);
+  --color-info: var(--hm-color-info);
+  --color-info-soft: var(--hm-color-info-soft);
+
+  --color-input: var(--hm-color-input);
+  --color-input-border: var(--hm-color-input-border);
+  --color-focus-ring: var(--hm-color-focus-ring);
+
+  --color-editor-bg: var(--hm-color-editor-bg);
+  --color-editor-text: var(--hm-color-editor-text);
+  --color-editor-code-bg: var(--hm-color-editor-code-bg);
+
+  --color-overlay: var(--hm-color-overlay);
+  --shadow-soft: var(--hm-shadow-soft);
+  --shadow-popover: var(--hm-shadow-popover);
+
+  --radius-sm: var(--hm-radius-sm);
+  --radius-md: var(--hm-radius-md);
+  --radius-lg: var(--hm-radius-lg);
+  --radius-radius: var(--hm-radius);
+
+  --color-card: var(--hm-color-surface-elevated);
+  --color-card-foreground: var(--hm-color-foreground);
+  --color-popover: var(--hm-color-surface-elevated);
+  --color-popover-foreground: var(--hm-color-foreground);
+  --color-muted: var(--hm-color-surface);
+  --color-muted-foreground: var(--hm-color-foreground-muted);
+  --color-destructive: var(--hm-color-danger);
+  --color-destructive-foreground: var(--hm-color-danger-foreground);
+  --color-ring: var(--hm-color-focus-ring);
+  --color-input-background: var(--hm-color-input);
+
+  --color-bg-app: var(--hm-color-background);
+  --color-bg-surface: var(--hm-color-surface);
+  --color-bg-embed: var(--hm-color-surface);
+  --color-bg-blue: var(--hm-color-primary-soft);
+  --color-text-primary: var(--hm-color-foreground);
+  --color-text-secondary: var(--hm-color-foreground-muted);
+  --color-text-muted: var(--hm-color-foreground-subtle);
+  --color-text-inverse: var(--hm-color-foreground-inverse);
+  --color-brand: var(--hm-color-primary);
+  --color-brand-hover: var(--hm-color-primary-hover);
+  --color-brand-soft: var(--hm-color-primary-soft);
+  --color-on-brand: var(--hm-color-primary-foreground);
+  --color-hover: var(--hm-color-surface-elevated);
+  --color-status-active-bg: var(--hm-color-success-soft);
+  --color-status-active-text: var(--hm-color-success);
 }

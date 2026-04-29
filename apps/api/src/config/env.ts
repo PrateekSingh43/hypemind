@@ -20,6 +20,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string(),
   PASSWORD_RESET_SECRET:z.string(),
   NODE_ENV:z.string(),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).optional().default("info"),
   REFRESH_SECRET: z.string(),
   EMAIL_SECRET: z.string(),
   JWT_EXPIRES_IN: z.string().optional().default("7d"),
@@ -49,6 +50,7 @@ export const databaseUrl: string = parsedEnv.DATABASE_URL;
 export const JWT_SECRET: string = parsedEnv.JWT_SECRET;
 export const PASSWORD_RESET_SECRET:string = parsedEnv.PASSWORD_RESET_SECRET
 export const NODE_ENV:string = parsedEnv.NODE_ENV;
+export const LOG_LEVEL = parsedEnv.LOG_LEVEL;
 export const REFRESH_SECRET: string = parsedEnv.REFRESH_SECRET;
 export const EMAIL_SECRET: string = parsedEnv.EMAIL_SECRET;
 export const VOYAGE_API_KEY:string = parsedEnv.VOYAGE_API_KEY;
