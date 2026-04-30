@@ -58,6 +58,7 @@ export const refreshTokenController = asyncHandler(async (req: Request, res: Res
 		res.status(200).json({ message: "Token refreshed", data: result })
 
 	} catch (err) {
+		res.clearCookie(REFRESH_COOKIE_NAME, { path: "/" });
 		next(err)
 
 	}

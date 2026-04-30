@@ -7,6 +7,6 @@ export const Navigator = {
 	area: (id: string) => `/dashboard/area/${id}`,
 	projects: () => "/dashboard/project",
 	project: (id: string) => `/dashboard/project/${id}`,
-	archive: () => "/dashboard/archive",
+	trash: () => "/dashboard/trash",
 	settings: () => "/dashboard/settings",
 };

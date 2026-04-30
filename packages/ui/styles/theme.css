@@ -1,120 +1,28 @@
-/* HypeMind design tokens.
-   This is the single source of raw theme values. Runtime theming uses the
-   `.dark` class from next-themes; public Tailwind tokens are mapped in
-   packages/tailwind-config/globals.css. */
+@layer base {
+  :root,
+  [data-theme="light"] {
+    --background: 0 0% 100%;
+    --surface: 0 0% 98%;
+    --foreground: 0 0% 9%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 45%;
+    --border: 0 0% 92%;
+    --border-hover: 0 0% 85%;
+    --primary: 252 89% 66%;
+    --primary-foreground: 0 0% 100%;
+    --radius: 0.5rem;
+  }
 
-:root {
-  --hm-color-background: #ffffff;
-  --hm-color-surface: #f9fafb;
-  --hm-color-surface-elevated: #ffffff;
-  --hm-color-panel: #ffffff;
-  --hm-color-sidebar: #f3f4f6;
-
-  --hm-color-foreground: #111827;
-  --hm-color-foreground-muted: #6b7280;
-  --hm-color-foreground-subtle: #9ca3af;
-  --hm-color-foreground-inverse: #ffffff;
-
-  --hm-color-border: #e5e7eb;
-  --hm-color-border-subtle: #f3f4f6;
-  --hm-color-border-strong: #d1d5db;
-
-  --hm-color-primary: #5e6ad2;
-  --hm-color-primary-hover: #4f5abf;
-  --hm-color-primary-soft: #eef0ff;
-  --hm-color-primary-foreground: #ffffff;
-
-  --hm-color-secondary: #f3f4f6;
-  --hm-color-secondary-foreground: #111827;
-  --hm-color-tertiary: transparent;
-  --hm-color-tertiary-foreground: #6b7280;
-  --hm-color-accent: #5e6ad2;
-  --hm-color-accent-foreground: #ffffff;
-
-  --hm-color-success: #22c55e;
-  --hm-color-success-soft: #f0fdf4;
-  --hm-color-warning: #f59e0b;
-  --hm-color-warning-soft: #fffbeb;
-  --hm-color-danger: #ef4444;
-  --hm-color-danger-soft: #fef2f2;
-  --hm-color-danger-foreground: #ffffff;
-  --hm-color-info: #3b82f6;
-  --hm-color-info-soft: #eff6ff;
-
-  --hm-color-input: #ffffff;
-  --hm-color-input-border: #e5e7eb;
-  --hm-color-focus-ring: #5e6ad2;
-
-  --hm-color-editor-bg: #ffffff;
-  --hm-color-editor-text: #374151;
-  --hm-color-editor-code-bg: #f8fafc;
-
-  --hm-color-overlay: #000000;
-  --hm-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --hm-shadow-popover: 0 8px 30px rgba(0, 0, 0, 0.12);
-
-  --hm-spacing-xl: 32px;
-  --hm-sidebar-width: 260px;
-  --hm-right-panel-width: 340px;
-  --hm-max-content-width: 1280px;
-  --hm-density-xs: 8px;
-  --hm-density-sm: 12px;
-  --hm-density-md: 16px;
-  --hm-density-lg: 24px;
-  --hm-radius-sm: 8px;
-  --hm-radius-md: 10px;
-  --hm-radius-lg: 12px;
-  --hm-radius: 0.75rem;
-  --hm-btn-height: 36px;
-}
-
-.dark {
-  --hm-color-background: #0e0f11;
-  --hm-color-surface: #151618;
-  --hm-color-surface-elevated: #1c1d21;
-  --hm-color-panel: #151618;
-  --hm-color-sidebar: #151618;
-
-  --hm-color-foreground: #eeeeee;
-  --hm-color-foreground-muted: #8a8f98;
-  --hm-color-foreground-subtle: #5a5d66;
-  --hm-color-foreground-inverse: #0e0f11;
-
-  --hm-color-border: #27282b;
-  --hm-color-border-subtle: #1f2023;
-  --hm-color-border-strong: #34353a;
-
-  --hm-color-primary: #5e6ad2;
-  --hm-color-primary-hover: #4b56b2;
-  --hm-color-primary-soft: #1e1f35;
-  --hm-color-primary-foreground: #ffffff;
-
-  --hm-color-secondary: #26272b;
-  --hm-color-secondary-foreground: #eeeeee;
-  --hm-color-tertiary: transparent;
-  --hm-color-tertiary-foreground: #8a8f98;
-  --hm-color-accent: #5e6ad2;
-  --hm-color-accent-foreground: #ffffff;
-
-  --hm-color-success: #34d399;
-  --hm-color-success-soft: #052e16;
-  --hm-color-warning: #fbbf24;
-  --hm-color-warning-soft: #451a03;
-  --hm-color-danger: #f87171;
-  --hm-color-danger-soft: #2d1215;
-  --hm-color-danger-foreground: #ffffff;
-  --hm-color-info: #60a5fa;
-  --hm-color-info-soft: #172554;
-
-  --hm-color-input: #1a1b1e;
-  --hm-color-input-border: #2a2b30;
-  --hm-color-focus-ring: #5e6ad2;
-
-  --hm-color-editor-bg: #0e0f11;
-  --hm-color-editor-text: #a0a5b0;
-  --hm-color-editor-code-bg: #131416;
-
-  --hm-color-overlay: #000000;
-  --hm-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --hm-shadow-popover: 0 8px 30px rgba(0, 0, 0, 0.5);
+  .dark,
+  [data-theme="dark"] {
+    --background: 0 0% 0%;
+    --surface: 0 0% 6%;
+    --foreground: 0 0% 93%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%;
+    --border: 0 0% 15%;
+    --border-hover: 0 0% 25%;
+    --primary: 252 89% 66%;
+    --primary-foreground: 0 0% 100%;
+  }
 }

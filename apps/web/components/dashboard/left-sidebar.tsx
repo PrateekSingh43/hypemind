@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  BookOpen,
+  
   ChevronDown,
   ChevronRight,
   Home,
@@ -19,9 +19,9 @@ import {
   Trash,
   type LucideIcon,
 } from "lucide-react";
-
+import { cn } from "@repo/ui/lib/utils";
 import { Navigator } from "../../lib/navigator";
-
+import { api, resolveWorkspaceId } from "../../lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,8 +80,6 @@ const SidebarItem = ({
   badge?: number;
 }) => {
   const paddingLeft = isCollapsed ? "0px" : `${8 + level * 16}px`;
-
-  // Split targets: chevron toggles expand, rest of item navigates
   const hasSplitTargets = href && isExpandable && !isCollapsed;
 
   const handleContainerClick = (e: React.MouseEvent) => {
@@ -103,26 +101,28 @@ const SidebarItem = ({
   const content = (
     <div
       onClick={handleContainerClick}
-      className={`group flex items-center py-1.25 mx-2 rounded-[5px] cursor-pointer ${active
-        ? "bg-[#1F2023] text-[#EEEEEE]"
-        : "text-[#8A8F98] hover:bg-[#26272B] hover:text-[#EEEEEE] transition-colors duration-75"
-        } ${isCollapsed ? "justify-center px-0" : "pr-2"}`}
+      className={`group flex items-center py-1.25 mx-2 rounded-[5px] cursor-pointer ${
+        active
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75"
+      } ${isCollapsed ? "justify-center px-0" : "pr-2"}`}
       style={{ paddingLeft: isCollapsed ? undefined : paddingLeft }}
       title={isCollapsed ? label : undefined}
     >
       {isExpandable && !isCollapsed ? (
         <div
-          className="w-5 flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75"
+          className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75"
           onClick={hasSplitTargets ? handleChevronClick : undefined}
         >
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </div>
       ) : Icon ? (
         <div
-          className={`flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75 ${isCollapsed ? "" : "w-5"
-            }`}
+          className={`flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75 ${
+            isCollapsed ? "" : "w-5"
+          }`}
         >
-          <Icon className={`w-3.5 h-3.5 ${active ? "text-[#EEEEEE]" : ""}`} />
+          <Icon className={`w-3.5 h-3.5 ${active ? "text-foreground" : ""}`} />
         </div>
       ) : (
         !isCollapsed && <div className="w-5 shrink-0" />
@@ -131,7 +131,7 @@ const SidebarItem = ({
         <>
           <span className="text-[13px] font-medium truncate leading-5">{label}</span>
           {badge !== undefined && badge > 0 && (
-            <span className="ml-auto text-[11px] font-normal text-[#5A5D66] shrink-0">{badge}</span>
+            <span className="ml-auto text-[11px] font-normal text-muted-foreground shrink-0">{badge}</span>
           )}
         </>
       )}
@@ -157,7 +157,7 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const [isThemeMounted, setIsThemeMounted] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ journal: false, area: false, pinned: false });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ journal: false, area: false, pinned: false, pages: false, quickNote: false });
   const [areas, setAreas] = useState<SidebarArea[]>([]);
   const [areasLoading, setAreasLoading] = useState(true);
   const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
@@ -167,7 +167,6 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
     setIsThemeMounted(true);
   }, []);
 
-  // Workspace loading mock/logic retention
   useEffect(() => {
     setAreas([
       {
@@ -204,13 +203,11 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
     setAreasLoading(false);
   }, []);
 
-  // Track how many projects to show per area (for +N more)
   const [showAllProjects, setShowAllProjects] = useState<Record<string, boolean>>({});
   const PROJECT_VISIBLE_LIMIT = 5;
 
   const toggle = (section: string) => setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
 
-  // Accordion behavior: expanding one area closes others
   const toggleArea = (id: string) => {
     setOpenAreas((prev) => {
       const isCurrentlyOpen = !!prev[id];
@@ -229,67 +226,32 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
   };
 
   return (
-    <div
-      className="flex flex-col border-r border-[#27282B] bg-[#151618] w-full h-full font-sans antialiased text-[#EEEEEE]"
-    >
-      {/* Workspace Header */}
+    <div className="flex flex-col border-r border-border bg-surface w-full h-full font-sans antialiased text-foreground">
       <div
-        className={`h-10 flex items-center px-2 hover:bg-[#26272B] mx-2 mt-3 mb-3 rounded-md cursor-pointer transition-colors duration-75 group ${isCollapsed ? "justify-center px-0" : ""
-          }`}
+        className={`h-10 flex items-center px-2 hover:bg-muted mx-2 mt-3 mb-3 rounded-md cursor-pointer transition-colors duration-75 group ${
+          isCollapsed ? "justify-center px-0" : ""
+        }`}
         onClick={isCollapsed ? onToggleCollapse : undefined}
         title={isCollapsed ? "Expand sidebar" : undefined}
       >
-        <div className="w-5 h-5 bg-[#5E6AD2] rounded-[4px] flex items-center justify-center shrink-0">
-          <div className="w-2.5 h-2.5 bg-white rounded-sm" />
+        <div className="w-5 h-5 bg-primary rounded-[4px] flex items-center justify-center shrink-0">
+          <div className="w-2.5 h-2.5 bg-primary-foreground rounded-sm" />
         </div>
 
         {!isCollapsed && (
           <>
             <div className="flex items-center ml-2.5 gap-1 flex-1 min-w-0">
-              <span className="text-[14px] font-medium truncate text-[#EEEEEE]">HypeMind</span>
-              <ChevronDown className="w-3.5 h-3.5 text-[#8A8F98] shrink-0" />
+              <span className="text-[14px] font-medium truncate text-foreground">HypeMind</span>
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </div>
 
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-1 hover:bg-[#34353A] rounded-[4px] text-[#8A8F98] hover:text-[#EEEEEE]"
-                    title="New Item"
-                  >
-                    <SquarePen className="w-4 h-4" />
-                  </div>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  side="right"
-                  sideOffset={10}
-                  className="border border-[#27282B] bg-[#151618] text-[#EEEEEE] shadow-lg backdrop-blur-sm z-50 min-w-40"
-                >
-                  <DropdownMenuItem
-                    onClick={openQuickCreate}
-                    className="cursor-pointer focus:bg-[#26272B] focus:text-[#EEEEEE]"
-                  >
-                    <Plus className="mr-2 size-4" />
-                    <span>Create Canvas</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setQuickNoteOpen(true)}
-                    className="cursor-pointer focus:bg-[#26272B] focus:text-[#EEEEEE]"
-                  >
-                    <BookOpen className="mr-2 size-4" />
-                    <span>Quick Note</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
               <div
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleCollapse?.();
                 }}
-                className="p-1 hover:bg-[#34353A] rounded-[4px] text-[#8A8F98] hover:text-[#EEEEEE]"
+                className="p-1 hover:bg-muted rounded-[4px] text-muted-foreground hover:text-foreground"
                 title="Collapse Sidebar"
               >
                 <PanelLeft className="w-4 h-4" />
@@ -299,11 +261,9 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
         )}
       </div>
 
-      {/* Scrollable Nav Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide py-1">
-        {/* Top Level Nav */}
         <div className="space-y-0.5">
-          <SidebarItem icon={Search} label="Search" isCollapsed={isCollapsed} onClick={() => { }} />
+          <SidebarItem icon={Search} label="Search" isCollapsed={isCollapsed} onClick={() => {}} />
           <SidebarItem
             icon={Home}
             label="Home"
@@ -322,7 +282,6 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
 
         <div className="h-5" />
 
-        {/* Pinned Section */}
         {!isCollapsed && (
           <div className="space-y-0.5">
             <SidebarItem
@@ -343,26 +302,30 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
 
         <div className="h-1" />
 
-        {/* Journal Section */}
         {!isCollapsed && (
           <div className="space-y-0.5">
-            {/* Journal header with hover-reveal create icon (matches Areas pattern) */}
-            <div className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
-              style={{ paddingLeft: '8px' }}
+            <div
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              style={{ paddingLeft: "8px" }}
             >
               <div className="flex items-center gap-0" onClick={() => toggle("journal")}>
-                <div className="w-5 flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75">
-                  {expanded["journal"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  {expanded["journal"] ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
                 </div>
-                <span className="text-[13px] font-medium text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75 leading-5">Journal</span>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
+                  Journal
+                </span>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
                 <div
-                  className="p-0.5 hover:bg-[#34353A] rounded-[3px] text-[#8A8F98] hover:text-[#EEEEEE] transition-colors"
+                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="New journal entry"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // TODO: create new journal entry for today
                   }}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -372,19 +335,12 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
 
             {expanded["journal"] && (
               <>
-                {/* Only show entries that exist — mock data for now */}
                 {[
                   { label: "Today", key: "j-today" },
                   { label: "Yesterday", key: "j-yesterday" },
                   { label: "Sat, 28 Feb", key: "j-feb28" },
                 ].map((entry) => (
-                  <SidebarItem
-                    key={entry.key}
-                    label={entry.label}
-                    level={1}
-                    href={Navigator.journal()}
-                    active={false}
-                  />
+                  <SidebarItem key={entry.key} label={entry.label} level={1} href={Navigator.journal()} active={false} />
                 ))}
               </>
             )}
@@ -393,29 +349,116 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
 
         <div className="h-1" />
 
-        {/* Areas Section */}
         {!isCollapsed && (
           <div className="space-y-0.5">
-            {/* Areas header with hover-reveal icons */}
-            <div className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
-              style={{ paddingLeft: '8px' }}
+            <div
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              style={{ paddingLeft: "8px" }}
             >
-              <div className="flex items-center gap-0" onClick={() => toggle("area")}>
-                <div className="w-5 flex shrink-0 items-center justify-start text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75">
-                  {expanded["area"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              <div className="flex items-center gap-0" onClick={() => toggle("pages")}>
+                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  {expanded["pages"] ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
                 </div>
-                <span className="text-[13px] font-medium text-[#8A8F98] group-hover:text-[#EEEEEE] transition-colors duration-75 leading-5">Areas</span>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
+                  Pages
+                </span>
               </div>
               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
                 <div
-                  className="p-0.5 hover:bg-[#34353A] rounded-[3px] text-[#8A8F98] hover:text-[#EEEEEE] transition-colors"
+                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="New page"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {expanded["pages"] && (
+              <>
+                <SidebarItem label="Product Vision" level={1} href="/dashboard/pages" active={isRouteActive(pathname, "/dashboard/pages")} />
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="h-1" />
+
+        {!isCollapsed && (
+          <div className="space-y-0.5">
+            <div
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              style={{ paddingLeft: "8px" }}
+            >
+              <div className="flex items-center gap-0" onClick={() => toggle("quickNote")}>
+                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  {expanded["quickNote"] ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
+                  Quick Notes
+                </span>
+              </div>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+                <div
+                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="New quick note"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {expanded["quickNote"] && (
+              <>
+                <SidebarItem label="Recent Note" level={1} href="/dashboard/quick-note" active={isRouteActive(pathname, "/dashboard/quick-note")} />
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="h-1" />
+
+        {!isCollapsed && (
+          <div className="space-y-0.5">
+            <div
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              style={{ paddingLeft: "8px" }}
+            >
+              <div className="flex items-center gap-0" onClick={() => toggle("area")}>
+                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  {expanded["area"] ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
+                </div>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
+                  Areas
+                </span>
+              </div>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+                <div
+                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Area options"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreHorizontal className="w-3.5 h-3.5" />
                 </div>
                 <div
-                  className="p-0.5 hover:bg-[#34353A] rounded-[3px] text-[#8A8F98] hover:text-[#EEEEEE] transition-colors"
+                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Create area"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -434,28 +477,31 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
 
                   return (
                     <React.Fragment key={area.id}>
-                      {/* Area row — click toggles dropdown, no navigation */}
                       <div
-                        className="group/area flex items-center mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 text-[#8A8F98] hover:bg-[#26272B] hover:text-[#EEEEEE] transition-colors duration-75"
+                        className="group/area flex items-center mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75"
                         style={{ paddingLeft: `${8 + 1 * 16}px` }}
                         onClick={() => toggleArea(area.id)}
                       >
                         <div className="w-5 flex shrink-0 items-center justify-start">
-                          {openAreas[area.id] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          {openAreas[area.id] ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          )}
                         </div>
                         <span className="text-[13px] font-medium truncate leading-5 flex-1">{area.title}</span>
-                        {/* Hover-reveal create project icon */}
                         <div
-                          className="opacity-0 group-hover/area:opacity-100 p-0.5 hover:bg-[#34353A] rounded-[3px] text-[#8A8F98] hover:text-[#EEEEEE] transition-all shrink-0 ml-1"
+                          className="opacity-0 group-hover/area:opacity-100 p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-all shrink-0 ml-1"
                           title="Create project in this area"
                           onClick={(e) => {
                             e.stopPropagation();
-                            // placeholder: create project action
                           }}
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </div>
-                        <span className="text-[11px] font-normal text-[#5A5D66] shrink-0 ml-1 group-hover/area:hidden">{projects.length}</span>
+                        <span className="text-[11px] font-normal text-muted-foreground shrink-0 ml-1 group-hover/area:hidden">
+                          {projects.length}
+                        </span>
                       </div>
 
                       {openAreas[area.id] && (
@@ -472,7 +518,7 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
                           {!isShowingAll && hiddenCount > 0 && (
                             <div
                               onClick={() => setShowAllProjects((prev) => ({ ...prev, [area.id]: true }))}
-                              className="mx-2 rounded-[5px] cursor-pointer py-1 text-[12px] font-medium text-[#5E6AD2] hover:text-[#7B83EB] transition-colors"
+                              className="mx-2 rounded-[5px] cursor-pointer py-1 text-[12px] font-medium text-primary hover:text-primary transition-colors"
                               style={{ paddingLeft: `${8 + 2 * 16}px` }}
                             >
                               + {hiddenCount} more
@@ -481,7 +527,7 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
                           {isShowingAll && hiddenCount > 0 && (
                             <div
                               onClick={() => setShowAllProjects((prev) => ({ ...prev, [area.id]: false }))}
-                              className="mx-2 rounded-[5px] cursor-pointer py-1 text-[12px] font-medium text-[#5E6AD2] hover:text-[#7B83EB] transition-colors"
+                              className="mx-2 rounded-[5px] cursor-pointer py-1 text-[12px] font-medium text-primary hover:text-primary transition-colors"
                               style={{ paddingLeft: `${8 + 2 * 16}px` }}
                             >
                               Show less
@@ -493,9 +539,9 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
                   );
                 })}
 
-                {areasLoading && <div className="px-8 py-2 text-[13px] text-[#8A8F98]">Loading areas...</div>}
+                {areasLoading && <div className="px-8 py-2 text-[13px] text-muted-foreground">Loading areas...</div>}
                 {!areasLoading && areas.length === 0 && (
-                  <div className="px-8 py-2 text-[13px] text-[#8A8F98]">No areas found.</div>
+                  <div className="px-8 py-2 text-[13px] text-muted-foreground">No areas found.</div>
                 )}
               </>
             )}
@@ -503,13 +549,12 @@ export function LeftSidebar({ isCollapsed = false, onToggleCollapse }: LeftSideb
         )}
       </div>
 
-      {/* Bottom Actions */}
-      <div className="py-2 space-y-0.5 bg-[#151618] mt-auto shrink-0">
+      <div className="py-2 space-y-0.5 bg-surface mt-auto shrink-0">
         <SidebarItem
           icon={Trash}
           label="Trash"
-          href={Navigator.archive()}
-          active={isRouteActive(pathname, Navigator.archive())}
+          href={Navigator.trash()}
+          active={isRouteActive(pathname, Navigator.trash())}
           isCollapsed={isCollapsed}
         />
         <SidebarItem
