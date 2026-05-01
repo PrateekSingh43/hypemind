@@ -308,7 +308,7 @@ export default function SettingsPage() {
                             </div>
                             <div className="flex items-center justify-between py-2 border-b border-border/30">
                                 <h3 className="text-[13px] text-foreground font-medium">Toggle Theme</h3>
-                                <kbd className="bg-surface border border-border px-2 py-1 rounded-md text-[11px] font-mono text-foreground font-semibold shadow-sm">Cmd/Ctrl + Shift + L</kbd>
+                                <kbd className="bg-surface border border-border px-2 py-1 rounded-md text-[11px] font-mono text-foreground font-semibold shadow-sm">Cmd/Ctrl + Alt + T</kbd>
                             </div>
                             <div className="flex items-center justify-between py-2">
                                 <h3 className="text-[13px] text-foreground font-medium">Toggle Left Sidebar</h3>

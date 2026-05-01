@@ -59,14 +59,24 @@ export const generateRefreshTokenTx = async (
 
 
 export const setRefreshToken = (res: Response, raw: string, expiresAt: Date) => {
+	const isProd = NODE_ENV === "production";
+	
 	res.cookie(REFRESH_COOKIE_NAME, raw, {
 		httpOnly: true,
-		secure: NODE_ENV === "production",
-		sameSite: NODE_ENV === "production" ? "none" : "lax",
+		secure: isProd, // Only secure in production
+		sameSite: isProd ? "none" : "lax",
 		maxAge: expiresAt.getTime() - Date.now(),
-		path: "/"
-	})
+		path: "/",
+		// On localhost, we don't set a domain to allow port sharing
+	});
 
+	// Set a non-httpOnly 'signal' cookie for the frontend middleware
+	res.cookie("hm_logged_in", "true", {
+		secure: isProd,
+		sameSite: isProd ? "none" : "lax",
+		maxAge: expiresAt.getTime() - Date.now(),
+		path: "/",
+	});
 }
 
 

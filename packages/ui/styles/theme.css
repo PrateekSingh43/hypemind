@@ -1,28 +1,28 @@
 @layer base {
   :root,
   [data-theme="light"] {
-    --background: 0 0% 100%;
-    --surface: 0 0% 98%;
-    --foreground: 0 0% 9%;
-    --muted: 0 0% 95%;
-    --muted-foreground: 0 0% 45%;
-    --border: 0 0% 92%;
-    --border-hover: 0 0% 85%;
-    --primary: 252 89% 66%;
+    --background: 0 0% 100%;       /* #FFFFFF */
+    --surface: 210 16% 97%;        /* #F7F8F9 */
+    --foreground: 210 6% 7%;       /* #111213 */
+    --muted: 210 12% 94%;          /* #EEF0F2 */
+    --muted-foreground: 219 9% 57%; /* #8A8F98 */
+    --border: 210 8% 92%;          /* #EAEBEC */
+    --border-hover: 210 10% 86%;   
+    --primary: 234 56% 60%;        /* #5E6AD2 */
     --primary-foreground: 0 0% 100%;
     --radius: 0.5rem;
   }
 
   .dark,
   [data-theme="dark"] {
-    --background: 0 0% 0%;
-    --surface: 0 0% 6%;
-    --foreground: 0 0% 93%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 60%;
-    --border: 0 0% 15%;
-    --border-hover: 0 0% 25%;
-    --primary: 252 89% 66%;
+    --background: 210 7% 6%;       /* #0E0F10 */
+    --surface: 210 6% 7%;          /* #111213 */
+    --foreground: 0 0% 93%;        /* #EDEDED */
+    --muted: 210 5% 15%;           /* #242628 */
+    --muted-foreground: 219 9% 57%; /* #8A8F98 */
+    --border: 210 6% 16%;          /* #27282B */
+    --border-hover: 210 6% 25%;    
+    --primary: 234 56% 60%;        /* #5E6AD2 */
     --primary-foreground: 0 0% 100%;
   }
 }

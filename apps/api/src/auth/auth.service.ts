@@ -388,6 +388,7 @@ export async function refreshTokenService(rawToken: string, userId: string, res:
 export async function logoutService(userId: string, res: any) {
 	await prisma.refreshToken.deleteMany({ where: { userId } })
 	res.clearCookie(REFRESH_COOKIE_NAME, { path: "/" });
+	res.clearCookie("hm_logged_in", { path: "/" });
 }
 
 

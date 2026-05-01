@@ -2,7 +2,8 @@ import { Router } from "express";
 import { prisma } from "@repo/db";
 
 
-import authRoute  from "./auth/auth.route";
+import authRoute from "./auth/auth.route";
+import quickNoteRoute from "./quicknote/quicknote.route";
 
 
 
@@ -13,7 +14,7 @@ const router: Router = Router();
 
 router.use("/api/v1/auth", authRoute)
 
-
+router.use("/api/v1/workspaces", quickNoteRoute)
 
 router.get("/api/v1/health/smoke", async (_req, res, next) => {
 	try {
@@ -35,4 +36,4 @@ router.get("/api/v1/health/smoke", async (_req, res, next) => {
 });
 
 
-export default router ; 
+export default router; 

@@ -123,6 +123,7 @@ async function request<T>(
 				// Refresh token expired or invalid
 				clearAccessToken();
 				clearWorkspaceId();
+				clearAuthIndicator();
 				if (canUseStorage()) {
 					window.location.href = "/login";
 				}
@@ -157,6 +158,14 @@ export function setAccessToken(token: string) {
 
 export function clearAccessToken() {
 	inMemoryAccessToken = null;
+}
+
+export function clearAuthIndicator() {
+	if (canUseStorage()) {
+		document.cookie = "hm_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+		// Also clear it specifically for the current domain just in case
+		document.cookie = `hm_logged_in=; path=/; domain=${window.location.hostname}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+	}
 }
 
 export function getAccessToken() {

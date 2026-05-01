@@ -3,6 +3,9 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const refreshToken = request.cookies.get('hypemind_refresh')?.value;
+  const isLoggedInSignal = request.cookies.get('hm_logged_in')?.value;
+
+  const hasAuth = !!refreshToken || !!isLoggedInSignal;
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/signup') ||
@@ -12,15 +15,16 @@ export function middleware(request: NextRequest) {
 
   const isDashboardRoute = request.nextUrl.pathname.startsWith('/dashboard');
 
-  // If user is trying to access dashboard but has no refresh token cookie, send to login
-  if (!refreshToken && isDashboardRoute) {
+  // If user is trying to access dashboard but has no auth indicator, send to login
+  if (!hasAuth && isDashboardRoute) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // If user is logged in and trying to access auth pages, redirect to dashboard
-  if (refreshToken && isAuthPage) {
+  // Only redirect to dashboard if they are on the LOGIN page specifically and have auth
+  // This prevents the loop where an expired session keeps bouncing back
+  if (hasAuth && request.nextUrl.pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 

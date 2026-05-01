@@ -48,8 +48,6 @@ enum WorkspaceRole {
   MEMBER
 }
 
-
-
 model RefreshToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique
@@ -134,7 +132,6 @@ model Workspace {
   createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 }
 
-
 model WorkspaceMember {
   id          String        @id @default(cuid())
   workspaceId String
@@ -148,7 +145,6 @@ model WorkspaceMember {
   @@unique([workspaceId, userId])
   @@index([userId])
 }
-
 
 model WorkspaceSetting {
   id          String    @id @default(cuid())
@@ -189,7 +185,6 @@ model Project {
   slug        String
   description String?
   status      ProjectStatus @default(ACTIVE)
- 
 
   items Item[]
 
@@ -223,8 +218,13 @@ enum ItemType {
   TASK
   LINK
   FILE
-
   SOCIAL_CLIP
+}
+enum ItemStatus {
+  ACTIVE
+  ARCHIVED
+  COMPLETED
+  TRASH
 }
 
 model Item {
@@ -233,10 +233,11 @@ model Item {
   workspaceId String
   projectId   String?
 
-  title String?
-  type  ItemType
-  stauts  String?
-  parentId String?
+  title       String?
+  type        ItemType
+  status      ItemStatus @default(ACTIVE)
+  parentId    String?
+  contentString String? @db.Text
   contentJson Json?
   url         String?
   metadata    Json?
@@ -363,9 +364,13 @@ enum InteractionAction {
   OPEN
   CREATE
   EDIT
-  DELETE
+  TRASH
   PIN
   CLIP
+  DUPLICATE
+  ARCHIVE
+  RESTORE
+  SHARE
 }
 
 model InteractionEvent {
