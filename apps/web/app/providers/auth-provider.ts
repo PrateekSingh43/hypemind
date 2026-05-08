@@ -1,13 +1,14 @@
 "use client";
 
 import {
-	storeWorkspaceId as persistWorkspaceId,
-	getWorkspaceId,
-	clearWorkspaceId,
+  storeWorkspaceId as persistWorkspaceId,
+  getWorkspaceId,
+  clearWorkspaceId,
+  subscribeToWorkspaceChange,
 } from "../../lib/api";
 
 export function storeWorkspaceId(workspaceId: string) {
-	persistWorkspaceId(workspaceId);
+  persistWorkspaceId(workspaceId);
 }
 
-export { getWorkspaceId, clearWorkspaceId };
+export { getWorkspaceId, clearWorkspaceId, subscribeToWorkspaceChange };

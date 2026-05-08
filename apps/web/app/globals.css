@@ -248,3 +248,90 @@
 .tiptap a:hover {
 	text-decoration: underline;
 }
+
+/* Quick Note Editor Styles */
+.quick-note-editor {
+	font-size: 15px;
+	line-height: 1.8;
+	color: hsl(var(--foreground));
+}
+
+.quick-note-editor p {
+	margin-bottom: 0.35em;
+}
+
+.quick-note-editor ul {
+	list-style-type: disc;
+	padding-left: 1.5em;
+	margin-bottom: 0.5em;
+}
+
+.quick-note-editor ol {
+	list-style-type: decimal;
+	padding-left: 1.5em;
+	margin-bottom: 0.5em;
+}
+
+.quick-note-editor li {
+	margin-bottom: 0.15em;
+}
+
+.quick-note-editor li p {
+	margin-bottom: 0;
+}
+
+.quick-note-editor h1 {
+	font-size: 1.5em;
+	font-weight: 700;
+	margin-top: 1.2em;
+	margin-bottom: 0.4em;
+}
+
+.quick-note-editor h2 {
+	font-size: 1.25em;
+	font-weight: 600;
+	margin-top: 1em;
+	margin-bottom: 0.4em;
+}
+
+.quick-note-editor h3 {
+	font-size: 1.1em;
+	font-weight: 600;
+	margin-top: 0.8em;
+	margin-bottom: 0.3em;
+}
+
+.quick-note-editor p.is-editor-empty:first-child::before {
+	color: hsl(var(--muted-foreground) / 0.3);
+	font-style: normal;
+	font-weight: 400;
+}
+
+/* Search Modal Animations */
+@keyframes search-backdrop-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes search-modal-in {
+	from {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+.search-backdrop-animate {
+	animation: search-backdrop-in 150ms ease-out forwards;
+}
+
+.search-modal-animate {
+	animation: search-modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

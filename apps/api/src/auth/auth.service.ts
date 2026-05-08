@@ -1,394 +1,422 @@
-import { Prisma, prisma } from "@repo/db"
-import { BadRequestError, ConflictError, ForbiddenError, UnauthorizedError } from "../errors/httpErrors"
-import { hash, verifyPassword } from "../utils/hash"
-import { createVerifyEmailToken, sendPasswordResetEmail, sendVerificationEmailToken } from "../utils/email/email"
-import { generateUniqueSlug, generateWorkspaceData } from "../utils/workspace"
+import { Prisma, prisma } from "@repo/db";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  UnauthorizedError,
+} from "../errors/httpErrors";
+import { hash, verifyPassword } from "../utils/hash";
+import {
+  createVerifyEmailToken,
+  sendPasswordResetEmail,
+  sendVerificationEmailToken,
+} from "../utils/email/email";
+import { generateUniqueSlug, generateWorkspaceData } from "../utils/workspace";
 
-import { createPasswordResetToken, generateAccessToken, generateRefreshToken, setRefreshToken, verifyPasswordResetToken, verifyRefreshToken } from "../utils/token"
+import {
+  clearAuthCookies,
+  createPasswordResetToken,
+  generateAccessToken,
+  generateRefreshToken,
+  generateRefreshTokenTx,
+  setRefreshToken,
+  verifyPasswordResetToken,
+  verifyRefreshToken,
+} from "../utils/token";
 
-import crypto from "crypto"
-import { EMAIL_SECRET, REFRESH_COOKIE_NAME } from "../config/env"
+import crypto from "crypto";
+import { EMAIL_SECRET } from "../config/env";
 
-import { logger } from "../utils/logger"
+import { logger } from "../utils/logger";
 
+const REFRESH_REUSE_GRACE_MS = 10_000;
 
-export const signupService = async (payload: { email: string, password: string, fullName: string }) => {
+export async function getSessionUser(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      emailVerified: true,
+      isActive: true,
+      userSetting: {
+        select: { onboardingCompleted: true },
+      },
+      memberships: {
+        select: { workspaceId: true },
+        take: 1,
+        orderBy: { joinedAt: "asc" },
+      },
+    },
+  });
 
-	if (!payload) {
-		throw new BadRequestError(
-			"Email and Password required"
-		);
-	}
+  if (!user || !user.isActive) {
+    throw new UnauthorizedError("Session expired");
+  }
 
-	const { email, password, fullName } = payload
+  if (!user.emailVerified) {
+    throw new UnauthorizedError("Email not verified");
+  }
 
-	// cleaning the email . 
-	console.log("o : just before the everything only the getting the payload ", process.hrtime.bigint())
-	const cleanEmail = email.trim().toLowerCase();
-	console.log("1: just after the cleaningEmail ", process.hrtime.bigint())
-
-	const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
-
-	console.log("2:After the prisma.user.findUnique", process.hrtime.bigint())
-
-	if (existingUser) {
-		throw new ConflictError("Email already registered. Please login");
-	}
-
-
-	console.log("time before hashing", process.hrtime.bigint())
-	const hashPassword = await hash(password);
-
-	if (!hashPassword) {
-		throw new ConflictError("NOt able to store user data , Try again");
-
-
-	}
-	console.log("time after hashing", process.hrtime.bigint());
-
-
-
-
-
-	console.log(
-		"Time before the whole transcation ", process.hrtime.bigint()
-	)
-	const user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-		const newUser = await tx.user.create({
-
-
-			data: {
-				email: cleanEmail,
-				name: fullName,
-				passwordHash: hashPassword,
-				emailVerified: false,
-			}
-		})
-
-		const { name, baseSlug } = await generateWorkspaceData(newUser.email);
-		const slug = await generateUniqueSlug(tx, baseSlug);
-
-
-		const workspace = await tx.workspace.create({
-			data: {
-				name,
-				slug,
-				createdById: newUser.id
-			}
-
-		})
-		await tx.workspaceMember.create({
-			data: {
-				workspaceId: workspace.id,
-				userId: newUser.id
-
-			}
-		})
-
-		await tx.workspaceSetting.create({
-			data: {
-				workspaceId: workspace.id,
-				prefs: {}
-
-			}
-		})
-
-
-		const userSetting = await tx.userSetting.create({
-			data: {
-				userId: newUser.id,
-				onboardingCompleted: false,
-				settings: {}
-			}
-		})
-
-		return {
-			userId: newUser.id,
-			email: newUser.email,
-			emailVerified: newUser.emailVerified,
-			onboardingCompleted: userSetting.onboardingCompleted
-		}
-
-	})
-
-	console.log(
-		"time after the full transaction", process.hrtime.bigint()
-	)
-
-
-	console.log("3:Before create verify email token", process.hrtime.bigint())
-	const rawToken = await createVerifyEmailToken(user.userId);
-
-	console.log("4:After create verifyEmail Token", process.hrtime.bigint())
-	await sendVerificationEmailToken(user.email, rawToken)
-	console.log("5: after sendverification email token", process.hrtime.bigint())
-	return {
-		emailverify: user.emailVerified,
-		onboardingVerify: user.onboardingCompleted,
-		id: user.userId,
-		email: user.email,
-		message: "signup succeful . Verify Your email"
-	}
-
-
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? "",
+    emailVerified: user.emailVerified,
+    onboardingCompleted: user.userSetting?.onboardingCompleted ?? false,
+    workspaceId: user.memberships[0]?.workspaceId ?? null,
+  };
 }
+
+export const signupService = async (payload: {
+  email: string;
+  password: string;
+  fullName: string;
+}) => {
+  if (!payload) {
+    throw new BadRequestError("Email and Password required");
+  }
+
+  const { email, password, fullName } = payload;
+
+  // cleaning the email .
+  console.log(
+    "o : just before the everything only the getting the payload ",
+    process.hrtime.bigint(),
+  );
+  const cleanEmail = email.trim().toLowerCase();
+  console.log("1: just after the cleaningEmail ", process.hrtime.bigint());
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email: cleanEmail },
+  });
+
+  console.log("2:After the prisma.user.findUnique", process.hrtime.bigint());
+
+  if (existingUser) {
+    throw new ConflictError("Email already registered. Please login");
+  }
+
+  console.log("time before hashing", process.hrtime.bigint());
+  const hashPassword = await hash(password);
+
+  if (!hashPassword) {
+    throw new ConflictError("NOt able to store user data , Try again");
+  }
+  console.log("time after hashing", process.hrtime.bigint());
+
+  console.log("Time before the whole transcation ", process.hrtime.bigint());
+  const user = await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      const newUser = await tx.user.create({
+        data: {
+          email: cleanEmail,
+          name: fullName,
+          passwordHash: hashPassword,
+          emailVerified: false,
+        },
+      });
+
+      const { name, baseSlug } = await generateWorkspaceData(newUser.email);
+      const slug = await generateUniqueSlug(tx, baseSlug);
+
+      const workspace = await tx.workspace.create({
+        data: {
+          name,
+          slug,
+          createdById: newUser.id,
+        },
+      });
+      await tx.workspaceMember.create({
+        data: {
+          workspaceId: workspace.id,
+          userId: newUser.id,
+        },
+      });
+
+      await tx.workspaceSetting.create({
+        data: {
+          workspaceId: workspace.id,
+          prefs: {},
+        },
+      });
+
+      const userSetting = await tx.userSetting.create({
+        data: {
+          userId: newUser.id,
+          onboardingCompleted: false,
+          settings: {},
+        },
+      });
+
+      return {
+        userId: newUser.id,
+        email: newUser.email,
+        emailVerified: newUser.emailVerified,
+        onboardingCompleted: userSetting.onboardingCompleted,
+      };
+    },
+  );
+
+  console.log("time after the full transaction", process.hrtime.bigint());
+
+  console.log("3:Before create verify email token", process.hrtime.bigint());
+  const rawToken = await createVerifyEmailToken(user.userId);
+
+  console.log("4:After create verifyEmail Token", process.hrtime.bigint());
+  await sendVerificationEmailToken(user.email, rawToken);
+  console.log("5: after sendverification email token", process.hrtime.bigint());
+  return {
+    emailverify: user.emailVerified,
+    onboardingVerify: user.onboardingCompleted,
+    id: user.userId,
+    email: user.email,
+    message: "signup succeful . Verify Your email",
+  };
+};
 
 export async function verifyEmailService(rawToken: string, res: any) {
-	const emailTokenHash = crypto.createHmac("sha-256", EMAIL_SECRET).update(rawToken).digest("hex");
+  const emailTokenHash = crypto
+    .createHmac("sha-256", EMAIL_SECRET)
+    .update(rawToken)
+    .digest("hex");
 
+  const verifyEmail = await prisma.emailVerification.findUnique({
+    where: { tokenHash: emailTokenHash },
+  });
 
-	const verifyEmail = await prisma.emailVerification.findUnique({ where: { tokenHash: emailTokenHash } })
+  if (!verifyEmail || verifyEmail.expiresAt < new Date()) {
+    throw new ConflictError("InvalidToken or expried Token ");
+  }
 
-	if (!verifyEmail || verifyEmail.expiresAt < new Date()) {
-		throw new ConflictError("InvalidToken or expried Token ");
-	}
+  const user = await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      const updatedUser = await tx.user.update({
+        where: { id: verifyEmail.userId },
+        data: {
+          emailVerified: true,
+        },
+      });
+      await tx.emailVerification.delete({ where: { id: verifyEmail.id } });
 
-	const user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-		const updatedUser = await tx.user.update({
-			where: { id: verifyEmail.userId },
-			data: {
-				emailVerified: true
-			}
+      return tx.user.findUnique({
+        where: { id: updatedUser.id },
+      });
+    },
+  );
 
-		})
-		await tx.emailVerification.delete({ where: { id: verifyEmail.id } });
+  if (!user || !user.isActive) {
+    throw new ConflictError("User does not exits");
+  }
 
-		return tx.user.findUnique({
-			where: { id: updatedUser.id },
+  const accessToken = generateAccessToken(user.id);
+  const { raw, expiresAt } = await generateRefreshToken(user.id);
 
-		});
+  setRefreshToken(res, raw, expiresAt);
 
-	})
-
-	if (!user || !user.isActive) {
-		throw new ConflictError("User does not exits")
-	}
-
-	const accessToken = generateAccessToken(user.id);
-	const { raw, expiresAt } = await generateRefreshToken(user.id)
-
-	setRefreshToken(res, raw, expiresAt)
-
-	return {
-		user: {
-			id: user.id,
-			email: user.email,
-			emailVerified: user.emailVerified
-
-		},
-		accessToken,
-	};
-
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      emailVerified: user.emailVerified,
+    },
+    accessToken,
+  };
 }
-
 
 export async function resendEmailService(email: string) {
+  if (!email) {
+    throw new BadRequestError("Email is required");
+  }
 
-	if (!email) {
-		throw new BadRequestError("Email is required")
-	};
+  // is this cleaning of the email is unncessary step or not.
+  const cleanEmail = email.trim().toLowerCase();
 
-	// is this cleaning of the email is unncessary step or not. 
-	const cleanEmail = email.trim().toLowerCase()
+  const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
 
-	const user = await prisma.user.findUnique({ where: { email: cleanEmail } })
+  if (!user || !user.isActive) {
+    return { message: "If email exists, verification link sent" };
+  }
+  if (user.emailVerified) {
+    throw new ConflictError("Email already verified");
+  }
 
-	if (!user || !user.isActive) {
-		return { message: "If email exists, verification link sent" };
+  const token = await createVerifyEmailToken(user.id);
 
-	}
-	if (user.emailVerified) {
-		throw new ConflictError("Email already verified");
-	}
+  await sendVerificationEmailToken(user.email, token);
 
-
-	const token = await createVerifyEmailToken(user.id);
-
-	await sendVerificationEmailToken(user.email, token)
-
-	return { message: "Verification email sent" };
-
+  return { message: "Verification email sent" };
 }
 
+export async function loginService(
+  payload: { email: string; password: string },
+  res: any,
+) {
+  if (!payload) {
+    throw new BadRequestError("Enter Email and Password");
+  }
+  const { email, password } = payload;
+  const cleanEmail = email.trim().toLowerCase();
 
-export async function loginService(payload: { email: string, password: string }, res: any) {
-	if (!payload) {
-		throw new BadRequestError("Enter Email and Password");
+  const exitingUser = await prisma.user.findUnique({
+    where: { email: cleanEmail },
+    include: { userSetting: true },
+  });
 
-	}
-	const { email, password } = payload;
-	const cleanEmail = email.trim().toLowerCase();
+  if (!exitingUser || !exitingUser.passwordHash) {
+    throw new ConflictError("user does  Exits Please Signup");
+  }
 
-	const exitingUser = await prisma.user.findUnique({ where: { email: cleanEmail }, include: { userSetting: true } });
+  let PasswrodVerify = false;
+  try {
+    if (exitingUser.passwordHash.startsWith("$argon2")) {
+      PasswrodVerify = await verifyPassword(exitingUser.passwordHash, password);
+    }
+  } catch (e) {
+    PasswrodVerify = false;
+  }
 
-	if (!exitingUser || !exitingUser.passwordHash) {
-		throw new ConflictError("user does  Exits Please Signup");
+  if (!PasswrodVerify) {
+    throw new ForbiddenError("Password is wrong try again");
+  }
 
-	}
+  const accessToken = generateAccessToken(exitingUser.id);
 
+  const { raw, expiresAt } = await generateRefreshToken(exitingUser.id);
 
-	let PasswrodVerify = false;
-	try {
-		if (exitingUser.passwordHash.startsWith("$argon2")) {
-			PasswrodVerify = await verifyPassword(exitingUser.passwordHash, password);
-		}
-	} catch (e) {
-		PasswrodVerify = false;
-	}
+  setRefreshToken(res, raw, expiresAt);
 
-	if (!PasswrodVerify) {
-		throw new ForbiddenError("Password is wrong try again");
-	}
-
-
-
-	const accessToken = generateAccessToken(exitingUser.id)
-
-	const { raw, expiresAt } = await generateRefreshToken(exitingUser.id)
-
-	setRefreshToken(res, raw, expiresAt)
-
-	return {
-		accessToken, user: { id: exitingUser.id, email: exitingUser.email, emailVerified: exitingUser.emailVerified, onboardingCompleted: exitingUser.userSetting?.onboardingCompleted }
-	}
+  return {
+    accessToken,
+    user: {
+      id: exitingUser.id,
+      email: exitingUser.email,
+      emailVerified: exitingUser.emailVerified,
+      onboardingCompleted: exitingUser.userSetting?.onboardingCompleted,
+    },
+  };
 }
 
 // forgot Password Service
 
 export async function forgotPasswordService(email: string, ip: string) {
+  const cleaned = email.trim().toLowerCase();
 
-	const cleaned = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: cleaned } });
 
+  if (/[,\n\r;]/.test(cleaned) || cleaned.split(/\s+/).length > 1) {
+    // log suspicious input for review
+    logger.warn({ ip, input: cleaned }, "forgot-password:  injection attempt");
+    throw new BadRequestError("Invalid email format");
+  }
 
-	const user = await prisma.user.findUnique({ where: { email: cleaned } })
+  if (
+    !user ||
+    !user.isActive ||
+    !user.emailVerified ||
+    user.createdAt > new Date()
+  ) {
+    throw new ConflictError(
+      "If email exits , password reset Insturuction sent",
+    );
+  }
 
+  // creating the verifiable email Token
+  const token = await createPasswordResetToken(user.id);
 
+  await sendPasswordResetEmail(token, cleaned);
 
-	if (/[,\n\r;]/.test(cleaned) || cleaned.split(/\s+/).length > 1) {
-		// log suspicious input for review
-		logger.warn({ ip, input: cleaned }, "forgot-password:  injection attempt");
-		throw new BadRequestError("Invalid email format");
-	}
-
-
-	if (!user || !user.isActive || !user.emailVerified || user.createdAt > new Date()) {
-		throw new ConflictError("If email exits , password reset Insturuction sent")
-	}
-
-	// creating the verifiable email Token 
-	const token = await createPasswordResetToken(user.id);
-
-	await sendPasswordResetEmail(token, cleaned);
-
-
-	return { message: "If email exists, password reset instructions sent" };
-
+  return { message: "If email exists, password reset instructions sent" };
 }
 
-export async function resetPasswordService(rawToken: string, newPassword: string, ip: string, res: any) {
-	// compaines take password multiple time should we also do that if yes then why because i don't see any need for our use case .
+export async function resetPasswordService(
+  rawToken: string,
+  newPassword: string,
+  ip: string,
+  res: any,
+) {
+  // compaines take password multiple time should we also do that if yes then why because i don't see any need for our use case .
 
-	if (!rawToken || !newPassword ) {
+  if (!rawToken || !newPassword) {
+    throw new BadRequestError("Token , Password and Email are required");
+  }
 
-		throw new BadRequestError("Token , Password and Email are required");
-	}
+  const verify = await verifyPasswordResetToken(rawToken);
 
-	const verify = await verifyPasswordResetToken(rawToken);
+  if (!verify) {
+    logger.warn({ ip }, "Reset-password: invalid token");
+    throw new BadRequestError("Invalid or expired reset token");
+  }
 
-	if (!verify) {
-		logger.warn({ ip }, "Reset-password: invalid token");
-		throw new BadRequestError("Invalid or expired reset token");
-	}
+  const password = await hash(newPassword);
 
-	const password = await hash(newPassword);
+  const updatedUser = await prisma.user.update({
+    data: { passwordHash: password },
+    where: { id: verify.userId },
+  });
 
-	const updatedUser = await prisma.user.update({ data: { passwordHash: password }, where: { id: verify.userId } })
+  if (!updatedUser) {
+    throw new BadRequestError("Failed to update password. Try again");
+  }
 
-	if (!updatedUser) {
-		throw new BadRequestError("Failed to update password. Try again");
-	}
+  await prisma.refreshToken.deleteMany({ where: { userId: verify.userId } });
 
+  const accesToken = generateAccessToken(updatedUser.id);
 
-	await prisma.refreshToken.deleteMany({ where: { userId: verify.userId } })
+  const { raw, expiresAt } = await generateRefreshToken(updatedUser.id);
 
+  setRefreshToken(res, raw, expiresAt);
 
-	const accesToken = generateAccessToken(updatedUser.id);
-
-	const { raw, expiresAt } = await generateRefreshToken(updatedUser.id)
-
-	setRefreshToken(res, raw, expiresAt)
-
-	return {
-		accesToken,
-		user: {
-			id: updatedUser.id,
-			email: updatedUser.email,
-			emailverified: updatedUser.emailVerified,
-		}
-	}
-
-
+  return {
+    accesToken,
+    user: {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      emailverified: updatedUser.emailVerified,
+    },
+  };
 }
 
+export async function refreshTokenService(rawToken: string, res: any) {
+  const token = await verifyRefreshToken(rawToken, {
+    allowRecentlyRevokedMs: REFRESH_REUSE_GRACE_MS,
+  });
+  if (!token) {
+    throw new UnauthorizedError("Session expired. Please login again");
+  }
 
+  const user = await getSessionUser(token.userId);
+  const accessToken = generateAccessToken(user.id);
 
-export async function refreshTokenService(rawToken: string, userId: string, res: any) {
+  if (!token.recentlyRevoked) {
+    const replacement = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const revokeResult = await tx.refreshToken.updateMany({
+          where: { id: token.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
 
-	const token = await verifyRefreshToken(rawToken)
-	if (!token) {
-		throw new ConflictError("Token not match , Try to re login");
+        if (revokeResult.count === 0) {
+          return null;
+        }
 
-	};
+        return generateRefreshTokenTx(tx, user.id);
+      },
+    );
 
+    if (replacement) {
+      setRefreshToken(res, replacement.raw, replacement.expiresAt);
+    }
+  }
 
-	const user = await prisma.user.findUnique({ where: { id: userId } })
-
-	if (!user || !user.isActive || user.createdAt > new Date()) {
-		throw new ConflictError("User Did not found Trying Creating an account")
-	};
-
-	const accessToken = generateAccessToken(user.id);
-
-
-
-
-
-
-	await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-		const { raw, expiresAt } = await generateRefreshToken(user.id);
-		const updateToken = await tx.refreshToken.delete({ where: { id: token.id } });
-
-		if (!updateToken) {
-			throw new BadRequestError("Something went wrong");
-		}
-
-		setRefreshToken(res, raw, expiresAt)
-
-	});
-
-
-
-
-
-
-	return {
-		accessToken,
-		user: {
-			id: user.id,
-			email: user.email,
-			emailVerified: user.emailVerified,
-
-
-		}
-	}
-
+  return {
+    accessToken,
+    user,
+  };
 }
-
 
 export async function logoutService(userId: string, res: any) {
-	await prisma.refreshToken.deleteMany({ where: { userId } })
-	res.clearCookie(REFRESH_COOKIE_NAME, { path: "/" });
-	res.clearCookie("hm_logged_in", { path: "/" });
+  await prisma.refreshToken.deleteMany({ where: { userId } });
+  clearAuthCookies(res);
 }
-
-
