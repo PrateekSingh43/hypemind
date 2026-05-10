@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FileText, Link as LinkIcon, Layout, Book, FolderGit2, Tag,
-  CheckCircle, ChevronRight, Search, Filter, X, PanelLeftClose, PanelLeft
+  CheckCircle, ChevronRight, Search, Filter, X, PanelLeftClose, PanelLeft, Video,
+  ExternalLink, Info, FilePlus
 } from 'lucide-react';
 import { Navigator } from '../../../lib/navigator';
 
@@ -17,28 +18,51 @@ type InboxItem = {
   tags?: string[];
 };
 
-// Purged mock data for a clean inbox
-const MOCK_ITEMS: InboxItem[] = [];
+const MOCK_ITEMS: InboxItem[] = [
+  {
+    id: '1',
+    title: 'API edge cases',
+    type: 'link',
+    updatedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    content: 'Need to handle 404s gracefully without red banners on the frontend. Ensure the fetch wrapper catches and maps to empty states.',
+  },
+  {
+    id: '2',
+    title: 'Auth flow improvement',
+    type: 'note',
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    content: 'The login redirect after signup is broken on safari. Need to inv...'
+  },
+  {
+    id: '3',
+    title: 'Design token audit',
+    type: 'video',
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    content: 'The concept of the video is to review all color token across the desi...'
+  }
+];
 
 const MOCK_PROJECTS = [
   { id: 'p1', name: 'HypeMind Dashboard', recent: true },
   { id: 'p2', name: 'AI Core Features', recent: true },
 ];
 
-const INITIAL_TAGS = ['ui', 'performance', 'backend', 'design', 'planning', 'bug', 'urgent'];
+const INITIAL_TAGS = ['ui', 'bug', 'backend', 'ai', 'planning'];
 
 const TYPE_OPTIONS = [
   { value: 'all', label: 'All Types' },
   { value: 'note', label: 'Notes', icon: FileText },
   { value: 'link', label: 'Links', icon: LinkIcon },
-  { value: 'canvas', label: 'Canvas', icon: Layout },
-  { value: 'journal', label: 'Journal', icon: Book },
+  { value: 'video', label: 'Videos', icon: Video },
+  { value: 'doc', label: 'Docs', icon: FileText },
 ];
 
 const getIcon = (type: string) => {
   switch (type.toLowerCase()) {
     case 'note': return FileText;
     case 'link': return LinkIcon;
+    case 'video': return Video;
+    case 'doc': return FileText;
     case 'canvas': return Layout;
     case 'journal': return Book;
     default: return FileText;
@@ -67,6 +91,21 @@ export default function InboxPage() {
   const [loading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('hypemind_inbox_selected');
+    if (saved && items.some(i => i.id === saved)) {
+      setSelectedId(saved);
+    } else if (items.length > 0) {
+      setSelectedId(items[0].id);
+    }
+  }, [items]);
+
+  useEffect(() => {
+    if (selectedId) {
+      localStorage.setItem('hypemind_inbox_selected', selectedId);
+    }
+  }, [selectedId]);
+
   const [projectPopoverOpen, setProjectPopoverOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
 
@@ -80,6 +119,7 @@ export default function InboxPage() {
   const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set());
   const [filterTags, setFilterTags] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [infoPopoverOpen, setInfoPopoverOpen] = useState(false);
 
   const selectedItem = items.find(i => i.id === selectedId);
   const projectInputRef = useRef<HTMLInputElement>(null);
@@ -231,9 +271,8 @@ export default function InboxPage() {
       >
         <div className="flex flex-col h-full w-[340px]">
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/50 shrink-0 gap-2">
-          <span className="text-[13px] font-semibold text-foreground truncate">
-            Inbox
-            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">{filteredItems.length}</span>
+          <span className="text-[14px] font-medium text-foreground truncate capitalize">
+            inbox
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -259,94 +298,95 @@ export default function InboxPage() {
           </div>
         </div>
 
-        {filterOpen && (
-          <div className="border-b border-border/50 bg-surface shrink-0">
-            <div className="px-3 pt-3 pb-2">
-              <div className="flex items-center gap-2 bg-background border border-border rounded-md px-2.5 py-1.5">
-                <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <div className="border-b border-border/50 bg-background shrink-0 flex flex-col relative z-20">
+            <div className="px-3 pt-3 pb-2 z-30 bg-background">
+              <div className="flex items-center gap-2 bg-surface border border-border rounded-md px-2.5 py-1.5 shadow-sm">
+                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search items..."
-                  className="w-full bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
+                  className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery('')} className="text-muted-foreground hover:text-foreground">
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="px-3 pb-2">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</span>
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                <button
-                  onClick={() => setFilterTypes(new Set())}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${filterTypes.size === 0
-                    ? 'bg-primary/15 text-primary border border-primary/30'
-                    : 'bg-surface border border-border text-muted-foreground hover:text-foreground hover:border-border-hover'
-                    }`}
-                >
-                  All Types
-                </button>
-                {TYPE_OPTIONS.filter(opt => opt.value !== 'all').map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => toggleFilterType(opt.value)}
-                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${filterTypes.has(opt.value)
-                      ? 'bg-primary/15 text-primary border border-primary/30'
-                      : 'bg-surface border border-border text-muted-foreground hover:text-foreground hover:border-border-hover'
-                      }`}
-                  >
-                    {opt.icon && <opt.icon className="w-3 h-3" />}
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {filterOpen && (
+              <div className="animate-in slide-in-from-top-2 fade-in duration-200 z-10 bg-background">
+                <div className="px-3 pb-2">
+                  <span className="text-[12px] font-medium text-muted-foreground">Type</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <button
+                      onClick={() => setFilterTypes(new Set())}
+                      className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${filterTypes.size === 0
+                        ? 'bg-primary/10 text-primary border border-primary/20'
+                        : 'bg-surface border border-border text-foreground hover:bg-muted'
+                        }`}
+                    >
+                      All Types
+                    </button>
+                    {TYPE_OPTIONS.filter(opt => opt.value !== 'all').map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleFilterType(opt.value)}
+                        className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors flex items-center gap-1.5 ${filterTypes.has(opt.value)
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'bg-surface border border-border text-foreground hover:bg-muted'
+                          }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="px-3 pb-3">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Tag</span>
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                <button
-                  onClick={() => setFilterTags(new Set())}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${filterTags.size === 0
-                    ? 'bg-primary/15 text-primary border border-primary/30'
-                    : 'bg-surface border border-border text-muted-foreground hover:text-foreground hover:border-border-hover'
-                    }`}
-                >
-                  All
-                </button>
-                {allItemTags.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => toggleFilterTag(tag)}
-                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${filterTags.has(tag)
-                      ? 'bg-primary/15 text-primary border border-primary/30'
-                      : 'bg-surface border border-border text-muted-foreground hover:text-foreground hover:border-border-hover'
-                      }`}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div className="px-3 pb-3">
+                  <span className="text-[12px] font-medium text-muted-foreground">Tag</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <button
+                      onClick={() => setFilterTags(new Set())}
+                      className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${filterTags.size === 0
+                        ? 'bg-primary/10 text-primary border border-primary/20'
+                        : 'bg-surface border border-border text-foreground hover:bg-muted'
+                        }`}
+                    >
+                      All
+                    </button>
+                    {INITIAL_TAGS.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => toggleFilterTag(tag)}
+                        className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${filterTags.has(tag)
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'bg-surface border border-border text-foreground hover:bg-muted'
+                          }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            {activeFilterCount > 0 && (
-              <div className="px-3 pb-2.5">
-                <button
-                  onClick={clearAllFilters}
-                  className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium flex items-center gap-1"
-                >
-                  <X className="w-3 h-3" />
-                  Clear all filters
-                </button>
+                {activeFilterCount > 0 && (
+                  <div className="px-3 pb-2.5">
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" />
+                      Clear all filters
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
 
         <div className="flex-1 overflow-y-auto scrollbar-hide py-2">
           {loading ? (
@@ -384,7 +424,7 @@ export default function InboxPage() {
                   <div
                     key={item.id}
                     onClick={() => setSelectedId(item.id)}
-                    className={`flex flex-col gap-1.5 p-3 rounded-md cursor-pointer transition-colors duration-75 ${isActive ? 'bg-muted' : 'hover:bg-muted/50'
+                    className={`flex flex-col gap-1.5 p-2.5 rounded-md cursor-pointer transition-colors duration-75 ${isActive ? 'bg-muted' : 'hover:bg-muted/50'
                       }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -448,9 +488,9 @@ export default function InboxPage() {
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto">
-              <div className="max-w-3xl mx-auto px-8 py-8">
-                <div className="flex items-center justify-between gap-2 mb-8 pb-6 border-b border-border/50 overflow-visible">
+            <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden px-8 py-8 max-w-3xl mx-auto w-full">
+                {/* 1. TOP META / UTILITY ROW */}
+                <div className="flex items-center justify-between gap-2 mb-6 pb-6 border-b border-border/50 overflow-visible shrink-0">
                   <div className="relative">
                     <button
                       onClick={() => setTagPopoverOpen(!tagPopoverOpen)}
@@ -458,11 +498,9 @@ export default function InboxPage() {
                     >
                       <Tag className="w-3.5 h-3.5" />
                       <span>Tags</span>
-                      {selectedItem.tags && selectedItem.tags.length > 0 && (
-                        <span className="ml-1 bg-muted text-foreground px-1.5 rounded-sm text-[10px]">
-                          {selectedItem.tags.length}
-                        </span>
-                      )}
+                      <span className="ml-1 bg-muted text-foreground px-1.5 rounded-sm text-[10px]">
+                        {selectedItem.tags?.length || 0}
+                      </span>
                     </button>
                     {tagPopoverOpen && (
                       <>
@@ -511,30 +549,98 @@ export default function InboxPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => setProjectPopoverOpen(!projectPopoverOpen)}
-                    className="px-4 py-1.5 bg-foreground hover:bg-foreground/90 text-background text-[13px] font-medium rounded-md transition-colors flex items-center gap-2 shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                    title="Open Source"
                   >
-                    <FolderGit2 className="w-3.5 h-3.5" />
-                    Add to Project
+                    <span>Open Source</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    value={selectedItem.title || ''}
-                    onChange={(e) => setItems(items.map(i => i.id === selectedId ? { ...i, title: e.target.value } : i))}
-                    placeholder={`Untitled ${selectedItem.type.toLowerCase()}`}
-                    className="w-full bg-transparent text-[24px] font-semibold text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
-                  />
-                  <textarea
-                    value={selectedItem.content || ''}
-                    onChange={(e) => setItems(items.map(i => i.id === selectedId ? { ...i, content: e.target.value } : i))}
-                    placeholder="Capture your thoughts..."
-                    className="w-full min-h-[300px] bg-transparent text-[15px] text-muted-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0 resize-none leading-relaxed"
-                  />
+                {/* 2. MAIN CONTENT SECTION */}
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  {/* Title Area - Fixed */}
+                  <div className="flex items-center gap-2 relative shrink-0 mb-4 max-w-full">
+                    <div className="grid min-w-0">
+                      <div className="invisible whitespace-pre col-start-1 row-start-1 text-[24px] font-semibold overflow-hidden">
+                        {(selectedItem.title || '') + ' '}
+                        {!selectedItem.title ? `Untitled ${selectedItem.type.toLowerCase()} ` : ''}
+                      </div>
+                      <input
+                        type="text"
+                        size={1}
+                        value={selectedItem.title || ''}
+                        onChange={(e) => setItems(items.map(i => i.id === selectedId ? { ...i, title: e.target.value } : i))}
+                        placeholder={`Untitled ${selectedItem.type.toLowerCase()}`}
+                        className="col-start-1 row-start-1 w-full bg-transparent text-[24px] font-semibold text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0 min-w-0 py-0 px-0"
+                      />
+                    </div>
+                    <div className="relative shrink-0 flex items-center h-full">
+                      <button
+                        onClick={() => setInfoPopoverOpen(!infoPopoverOpen)}
+                        className="w-7 h-7 rounded-md border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
+                        title="Info"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                      {infoPopoverOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setInfoPopoverOpen(false)} />
+                          <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col p-4 space-y-4">
+                            <div>
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Source</span>
+                              <p className="text-[13px] text-foreground mt-1 truncate">https://example.com/source</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Author</span>
+                              <p className="text-[13px] text-foreground mt-1">Jane Doe</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</span>
+                              <p className="text-[13px] text-foreground mt-1 capitalize">{selectedItem.type}</p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Saved</span>
+                              <p className="text-[13px] text-foreground mt-1">{new Date(selectedItem.updatedAt).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Body Content - Scrollable when overflowing */}
+                  <div className="flex flex-col min-h-0 shrink overflow-y-auto scrollbar-hide py-2">
+                    <div className="grid w-full">
+                      <div className="invisible whitespace-pre-wrap col-start-1 row-start-1 break-words text-[15px] leading-relaxed">
+                        {(selectedItem.content || '') + ' '}
+                      </div>
+                      <textarea
+                        value={selectedItem.content || ''}
+                        onChange={(e) => setItems(items.map(i => i.id === selectedId ? { ...i, content: e.target.value } : i))}
+                        placeholder="Capture your thoughts..."
+                        className="col-start-1 row-start-1 w-full h-full bg-transparent text-[15px] text-muted-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0 resize-none leading-relaxed overflow-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. BOTTOM ACTION BUTTONS SECTION */}
+                  <div className="mt-8 pt-6 border-t border-border/50 flex items-center justify-end gap-3 shrink-0">
+                    <button
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <FilePlus className="w-3.5 h-3.5" />
+                      <span>Add to Page</span>
+                    </button>
+                    <button
+                      onClick={() => setProjectPopoverOpen(!projectPopoverOpen)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <FolderGit2 className="w-3.5 h-3.5" />
+                      <span>Add to Project</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
             </div>
 
             {projectPopoverOpen && (

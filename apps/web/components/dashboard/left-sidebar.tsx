@@ -18,6 +18,9 @@ import {
   Check,
   FileText,
   Loader2,
+  Folder,
+  Pin,
+  PenLine,
   type LucideIcon,
 } from "lucide-react";
 
@@ -171,6 +174,7 @@ export function LeftSidebar({
     quickNote: false,
     area: false,
     projects: false,
+    pinned: false,
   });
   const [areas, setAreas] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -494,7 +498,17 @@ export function LeftSidebar({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <div className="flex items-center ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-75 shrink-0 pr-1">
+            <div className="flex items-center ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-75 shrink-0 pr-1 gap-0.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsSearchOpen(true);
+                }}
+                className="w-6 h-6 flex items-center justify-center hover:bg-muted rounded-[4px] text-muted-foreground hover:text-foreground transition-colors outline-none"
+                title="Search (⌘K)"
+              >
+                <Search className="w-4 h-4" />
+              </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -511,24 +525,8 @@ export function LeftSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide py-1">
-        {/* SECTION 2: SEARCH, HOME, INBOX */}
+        {/* SECTION 2: HOME, INBOX, PINNED */}
         <div className="space-y-0.5">
-          <div className="relative group/search">
-            <SidebarItem
-              icon={Search}
-              label="Search"
-              isCollapsed={isCollapsed}
-              onClick={() => setIsSearchOpen(true)}
-            />
-            <div className="absolute left-1/2 -translate-x-1/2 top-[calc(100%+4px)] opacity-0 group-hover/search:opacity-100 pointer-events-none transition-opacity duration-200 z-[100] flex items-center gap-2 whitespace-nowrap bg-foreground text-background px-2.5 py-1.5 rounded-md shadow-lg border border-border/10">
-              <span className="text-[12px] font-medium">
-                Search
-              </span>
-              <kbd className="text-[10px] font-sans bg-background/20 text-background px-1.5 py-0.5 rounded border border-background/20">
-                ⌘K
-              </kbd>
-            </div>
-          </div>
           <SidebarItem
             icon={Home}
             label="Home"
@@ -543,6 +541,50 @@ export function LeftSidebar({
             active={isRouteActive(pathname, Navigator.inbox())}
             isCollapsed={isCollapsed}
           />
+          
+          {!isCollapsed && (
+            <>
+              <div
+                className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+                style={{ paddingLeft: "8px" }}
+              >
+                <div
+                  className="flex items-center gap-0 flex-1 min-w-0"
+                  onClick={() => toggle("pinned")}
+                >
+                  <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                    <Pin className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
+                    Pinned
+                  </span>
+                  <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                    {expanded["pinned"] ? (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75 ml-1">
+                  <div
+                    className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                    title="Pin item"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+              </div>
+              {expanded["pinned"] && (
+                <div className="mt-1 text-[13px] text-muted-foreground px-8 py-1">
+                  No pinned items.
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="h-5" />
@@ -550,65 +592,33 @@ export function LeftSidebar({
         {/* SECTION 3: PAGES, QUICK NOTE */}
         {!isCollapsed && (
           <div className="space-y-0.5">
-            {/* Pages Section */}
-            <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
-              style={{ paddingLeft: "8px" }}
-            >
-              <div
-                className="flex items-center gap-0"
-                onClick={() => toggle("pages")}
-              >
-                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                  {expanded["pages"] ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  )}
-                </div>
-                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
-                  Pages
-                </span>
-              </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
-                <div
-                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
-                  title="New page"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </div>
-
-            {expanded["pages"] && <>{/* Empty for now, as requested */}</>}
-
             {/* Quick Note Section */}
             <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
               style={{ paddingLeft: "8px" }}
             >
               <div
-                className="flex items-center gap-0"
+                className="flex items-center gap-0 flex-1 min-w-0"
                 onClick={() => toggle("quickNote")}
               >
                 <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  <PenLine className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
+                  Quick Notes
+                </span>
+                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
                   {expanded["quickNote"] ? (
                     <ChevronDown className="w-3.5 h-3.5" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5" />
                   )}
                 </div>
-                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
-                  Quick Notes
-                </span>
               </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75 ml-1">
                 <div className="relative group/tooltip flex items-center">
                   <div
-                    className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
                       router.push("/dashboard/quick-note/new");
@@ -646,6 +656,44 @@ export function LeftSidebar({
                 ))}
               </div>
             )}
+
+            {/* Pages Section */}
+            <div
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+              style={{ paddingLeft: "8px" }}
+            >
+              <div
+                className="flex items-center gap-0 flex-1 min-w-0"
+                onClick={() => toggle("pages")}
+              >
+                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  <FileText className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
+                  Pages
+                </span>
+                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  {expanded["pages"] ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75 ml-1">
+                <div
+                  className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="New page"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {expanded["pages"] && <>{/* Empty for now, as requested */}</>}
           </div>
         )}
 
@@ -654,36 +702,94 @@ export function LeftSidebar({
         {/* SECTION 4: AREAS AND PROJECTS */}
         {!isCollapsed && (
           <div className="space-y-0.5">
-            {/* Areas Section */}
+            {/* Projects Section */}
             <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
               style={{ paddingLeft: "8px" }}
             >
               <div
-                className="flex items-center gap-0"
+                className="flex items-center gap-0 flex-1 min-w-0"
+                onClick={() => toggle("projects")}
+              >
+                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  <Folder className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
+                  Projects
+                </span>
+                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  {expanded["projects"] ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75 ml-1">
+                <div
+                  className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Create project"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </div>
+              </div>
+            </div>
+
+            {expanded["projects"] && (
+              <>
+                {areasLoading && (
+                  <div className="px-8 py-2 text-[13px] text-muted-foreground">
+                    Loading projects...
+                  </div>
+                )}
+                {!areasLoading && projects.length === 0 && (
+                  <div className="px-8 py-2 text-[13px] text-muted-foreground">
+                    No projects found.
+                  </div>
+                )}
+                {!areasLoading &&
+                  projects.map((project) => (
+                    <SidebarItem
+                      key={project.id}
+                      label={project.title}
+                      level={1}
+                      href={Navigator.project(project.id)}
+                      active={isRouteActive(
+                        pathname,
+                        Navigator.project(project.id),
+                      )}
+                    />
+                  ))}
+              </>
+            )}
+
+            {/* Areas Section */}
+            <div
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+              style={{ paddingLeft: "8px" }}
+            >
+              <div
+                className="flex items-center gap-0 flex-1 min-w-0"
                 onClick={() => toggle("area")}
               >
                 <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  <Folder className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
+                  Areas
+                </span>
+                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
                   {expanded["area"] ? (
                     <ChevronDown className="w-3.5 h-3.5" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5" />
                   )}
                 </div>
-                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
-                  Areas
-                </span>
               </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75 ml-1">
                 <div
-                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
-                  title="Area options"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreHorizontal className="w-3.5 h-3.5" />
-                </div>
-                <div
-                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Create area"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -723,65 +829,6 @@ export function LeftSidebar({
                         {area.title}
                       </span>
                     </div>
-                  ))}
-              </>
-            )}
-
-            {/* Projects Section */}
-            <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2"
-              style={{ paddingLeft: "8px" }}
-            >
-              <div
-                className="flex items-center gap-0"
-                onClick={() => toggle("projects")}
-              >
-                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                  {expanded["projects"] ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  )}
-                </div>
-                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5">
-                  Projects
-                </span>
-              </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
-                <div
-                  className="p-0.5 hover:bg-muted rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
-                  title="Create project"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </div>
-
-            {expanded["projects"] && (
-              <>
-                {areasLoading && (
-                  <div className="px-8 py-2 text-[13px] text-muted-foreground">
-                    Loading projects...
-                  </div>
-                )}
-                {!areasLoading && projects.length === 0 && (
-                  <div className="px-8 py-2 text-[13px] text-muted-foreground">
-                    No projects found.
-                  </div>
-                )}
-                {!areasLoading &&
-                  projects.map((project) => (
-                    <SidebarItem
-                      key={project.id}
-                      label={project.title}
-                      level={1}
-                      href={Navigator.project(project.id)}
-                      active={isRouteActive(
-                        pathname,
-                        Navigator.project(project.id),
-                      )}
-                    />
                   ))}
               </>
             )}
