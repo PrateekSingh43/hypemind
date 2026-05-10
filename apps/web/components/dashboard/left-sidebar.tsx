@@ -2,14 +2,13 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   ChevronDown,
   ChevronRight,
   Home,
   Inbox,
-  MoreHorizontal,
   Plus,
   Search,
   Settings,
@@ -41,7 +40,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
-
 
 const isRouteActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(`${href}/`);
@@ -153,11 +151,39 @@ type LeftSidebarProps = {
   onToggleCollapse?: () => void;
 };
 
+type QuickNoteSummary = {
+  id: string;
+  title?: string | null;
+  contentString?: string | null;
+  tags?: string[];
+  updatedAt?: string;
+};
+
+type SidebarTreeItem = {
+  id: string;
+  title: string;
+};
+
+type AuthMeResponse = {
+  data?: {
+    user?: {
+      name?: string | null;
+      email?: string | null;
+      workspaceId?: string | null;
+    };
+    name?: string | null;
+    email?: string | null;
+  };
+  name?: string | null;
+  email?: string | null;
+};
+
 export function LeftSidebar({
   isCollapsed = false,
   onToggleCollapse,
 }: LeftSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [userName, setUserName] = useState<string>("User");
   const [userEmail, setUserEmail] = useState<string>("");
@@ -176,42 +202,80 @@ export function LeftSidebar({
     projects: false,
     pinned: false,
   });
-  const [areas, setAreas] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
+  const [areas, setAreas] = useState<SidebarTreeItem[]>([]);
+  const [projects, setProjects] = useState<SidebarTreeItem[]>([]);
   const [areasLoading, setAreasLoading] = useState(true);
   const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
-  const [quickNotes, setQuickNotes] = useState<any[]>([]);
-
+  const [quickNotes, setQuickNotes] = useState<QuickNoteSummary[]>([]);
+  const [quickNotesLoading, setQuickNotesLoading] = useState(false);
+  const [isCreatingQuickNote, setIsCreatingQuickNote] = useState(false);
 
   const currentWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
     workspaces[0] ??
     null;
 
+  const fetchQuickNotes = useCallback(async () => {
+    setQuickNotesLoading(true);
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+      const res = await api.get<{ data: QuickNoteSummary[] }>(
+        `/workspaces/${workspaceId}/item/quick-note`,
+      );
+      setQuickNotes(res.data);
+    } catch (err) {
+      console.error("Failed to fetch quick notes for sidebar:", err);
+    } finally {
+      setQuickNotesLoading(false);
+    }
+  }, [activeWorkspaceId]);
+
   useEffect(() => {
-    const fetchQuickNotes = async () => {
-      try {
-        const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
-        if (!workspaceId) return;
-        const res = await api.get<{ data: any[] }>(
-          `/workspaces/${workspaceId}/item/quick-note`,
+    if (pathname.startsWith("/dashboard/quick-note")) {
+      setExpanded((prev) =>
+        prev.quickNote ? prev : { ...prev, quickNote: true },
+      );
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (expanded.quickNote) {
+      void fetchQuickNotes();
+    }
+  }, [expanded.quickNote, fetchQuickNotes]);
+
+  useEffect(() => {
+    const handleQuickNoteUpdated = (event: Event) => {
+      const note = (event as CustomEvent<Partial<QuickNoteSummary>>).detail;
+      if (!note?.id) return;
+      const noteId = note.id;
+
+      setQuickNotes((prev) => {
+        const existing = prev.some((current) => current.id === noteId);
+        if (!existing) {
+          return [{ ...note, id: noteId }, ...prev];
+        }
+
+        return prev.map((current) =>
+          current.id === noteId ? { ...current, ...note, id: noteId } : current,
         );
-        setQuickNotes(res.data.slice(0, 5));
-      } catch (err) {
-        console.error("Failed to fetch quick notes for sidebar:", err);
-      }
+      });
     };
 
-    if (expanded.quickNote) {
-      fetchQuickNotes();
-    }
-  }, [activeWorkspaceId, expanded.quickNote]);
+    window.addEventListener("hm:quick-note-updated", handleQuickNoteUpdated);
+    return () =>
+      window.removeEventListener(
+        "hm:quick-note-updated",
+        handleQuickNoteUpdated,
+      );
+  }, []);
 
   useEffect(() => {
     const fetchSessionAndWorkspaces = async () => {
       setIsWorkspaceLoading(true);
       try {
-        const res = (await api.get("/auth/me")) as any;
+        const res = await api.get<AuthMeResponse>("/auth/me");
         const rawName = res.data?.user?.name || res.data?.name;
         const rawEmail = res.data?.user?.email || res.data?.email;
         const defaultWorkspaceId = res.data?.user?.workspaceId ?? null;
@@ -279,6 +343,38 @@ export function LeftSidebar({
 
   const { setTheme, resolvedTheme } = useTheme();
 
+  const handleCreateQuickNote = useCallback(async () => {
+    if (isCreatingQuickNote) return;
+
+    setIsCreatingQuickNote(true);
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+
+      const res = await api.post<{ data: QuickNoteSummary }>(
+        `/workspaces/${workspaceId}/item/quick-note`,
+        {
+          content: " ",
+          contentJson: {
+            type: "doc",
+            content: [{ type: "paragraph" }],
+          },
+        },
+      );
+
+      setExpanded((prev) => ({ ...prev, quickNote: true }));
+      setQuickNotes((prev) => [
+        res.data,
+        ...prev.filter((note) => note.id !== res.data.id),
+      ]);
+      router.push(`/dashboard/quick-note?id=${res.data.id}`);
+    } catch (err) {
+      console.error("Failed to create quick note:", err);
+    } finally {
+      setIsCreatingQuickNote(false);
+    }
+  }, [activeWorkspaceId, isCreatingQuickNote, router]);
+
   useEffect(() => {
     const handleGlobalShortcut = (e: KeyboardEvent) => {
       // Cmd/Ctrl + K to open search (works everywhere)
@@ -304,7 +400,8 @@ export function LeftSidebar({
         e.key.toLowerCase() === "n"
       ) {
         e.preventDefault();
-        router.push("/dashboard/quick-note/new");
+        e.stopPropagation();
+        void handleCreateQuickNote();
         return;
       }
 
@@ -319,7 +416,7 @@ export function LeftSidebar({
     window.addEventListener("keydown", handleGlobalShortcut, true);
     return () =>
       window.removeEventListener("keydown", handleGlobalShortcut, true);
-  }, [resolvedTheme, setTheme]);
+  }, [handleCreateQuickNote, resolvedTheme, setTheme]);
 
   const toggle = (section: string) =>
     setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -541,7 +638,7 @@ export function LeftSidebar({
             active={isRouteActive(pathname, Navigator.inbox())}
             isCollapsed={isCollapsed}
           />
-          
+
           {!isCollapsed && (
             <>
               <div
@@ -594,52 +691,75 @@ export function LeftSidebar({
           <div className="space-y-0.5">
             {/* Quick Note Section */}
             <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+              className={`group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 transition-colors duration-75 ${
+                pathname.startsWith("/dashboard/quick-note")
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
               style={{ paddingLeft: "8px" }}
+              onClick={() => toggle("quickNote")}
             >
-              <div
-                className="flex items-center gap-0 flex-1 min-w-0"
-                onClick={() => toggle("quickNote")}
-              >
+              <div className="flex items-center gap-0 flex-1 min-w-0">
                 <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
                   <PenLine className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
+                <span className="text-[13px] font-medium transition-colors duration-75 leading-5 flex-1 truncate">
                   Quick Notes
                 </span>
-                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                  {expanded["quickNote"] ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  )}
+                <div className="flex items-center gap-0.5 ml-1 opacity-70 group-hover:opacity-100 transition-opacity duration-75">
+                  <div className="relative group/tooltip flex items-center">
+                    <button
+                      type="button"
+                      disabled={isCreatingQuickNote}
+                      className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleCreateQuickNote();
+                      }}
+                    >
+                      {isCreatingQuickNote ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <div className="absolute top-[120%] right-0 opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity duration-200 z-[100] flex items-center gap-2 whitespace-nowrap bg-foreground text-background px-2.5 py-1.5 rounded-md shadow-lg border border-border/10">
+                      <span className="text-[12px] font-medium">
+                        New Quick Note
+                      </span>
+                      <kbd className="text-[10px] font-sans bg-background/20 text-background px-1.5 py-0.5 rounded border border-background/20">
+                        N
+                      </kbd>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-75 ml-1">
-                <div className="relative group/tooltip flex items-center">
+                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
                   <div
-                    className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push("/dashboard/quick-note/new");
+                    className="flex items-center justify-center transition-transform duration-200"
+                    style={{
+                      transform: expanded["quickNote"]
+                        ? "rotate(90deg)"
+                        : "rotate(0deg)",
                     }}
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="absolute top-[120%] right-0 opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity duration-200 z-[100] flex items-center gap-2 whitespace-nowrap bg-foreground text-background px-2.5 py-1.5 rounded-md shadow-lg border border-border/10">
-                    <span className="text-[12px] font-medium">
-                      New Quick Note
-                    </span>
-                    <kbd className="text-[10px] font-sans bg-background/20 text-background px-1.5 py-0.5 rounded border border-background/20">
-                      N
-                    </kbd>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </div>
                 </div>
               </div>
             </div>
 
             {expanded["quickNote"] && (
-              <div className="mt-1">
+              <div className="mt-1 space-y-0.5">
+                {quickNotesLoading && (
+                  <div className="px-8 py-1 text-[12px] text-muted-foreground">
+                    Loading notes...
+                  </div>
+                )}
+                {!quickNotesLoading && quickNotes.length === 0 && (
+                  <div className="px-8 py-1 text-[12px] text-muted-foreground">
+                    No quick notes yet.
+                  </div>
+                )}
                 {quickNotes.map((note) => (
                   <SidebarItem
                     key={note.id}
@@ -650,7 +770,10 @@ export function LeftSidebar({
                       "Untitled Note"
                     }
                     href={`/dashboard/quick-note?id=${note.id}`}
-                    active={pathname.includes(note.id)}
+                    active={
+                      pathname.includes("/dashboard/quick-note") &&
+                      searchParams.get("id") === note.id
+                    }
                     level={1}
                   />
                 ))}

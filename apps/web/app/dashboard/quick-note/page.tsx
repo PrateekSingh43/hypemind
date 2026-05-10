@@ -1,43 +1,87 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  Suspense,
+} from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
-  Heading2,
   List,
   ListOrdered,
   Tag,
   FolderGit2,
   FileOutput,
   FileText,
-  X,
   CheckCircle,
   Loader2,
+  Highlighter,
+  Search,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import type { JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExtension from "@tiptap/extension-underline";
+import HighlightExtension from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
-import {
-  api,
-  resolveWorkspaceId,
-} from "../../../lib/api";
+import { api, resolveWorkspaceId } from "../../../lib/api";
+
+const INITIAL_TAGS = ["ui", "bug", "backend", "ai", "planning"];
+const EMPTY_DOC: JSONContent = {
+  type: "doc",
+  content: [{ type: "paragraph" }],
+};
+
+type QuickNoteRecord = {
+  id: string;
+  title?: string | null;
+  contentString?: string | null;
+  contentJson?: unknown;
+  tags?: string[];
+};
+
+const isTiptapDoc = (value: unknown): value is JSONContent => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { type?: unknown }).type === "doc"
+  );
+};
+
+const textToDocument = (text?: string | null): JSONContent => {
+  const lines = text ? text.split("\n") : [""];
+
+  return {
+    type: "doc",
+    content: lines.map((line) =>
+      line
+        ? { type: "paragraph", content: [{ type: "text", text: line }] }
+        : { type: "paragraph" },
+    ),
+  };
+};
 
 function QuickNoteContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const noteId = searchParams.get("id");
 
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
-  const [showTagInput, setShowTagInput] = useState(false);
+  const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
+  const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
+  const [tagSearch, setTagSearch] = useState("");
+
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [toast, setToast] = useState<{ visible: boolean; message: string } | null>(null);
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -46,6 +90,18 @@ function QuickNoteContent() {
   const tagInputRef = useRef<HTMLInputElement>(null);
   const noteIdRef = useRef<string | null>(noteId);
   const initialLoadDone = useRef(false);
+  const latestTitleRef = useRef(title);
+  const latestTagsRef = useRef(tags);
+  const currentContentRef = useRef<{
+    content?: string;
+    contentJson?: JSONContent;
+  }>({
+    content: "",
+    contentJson: EMPTY_DOC,
+  });
+
+  latestTitleRef.current = title;
+  latestTagsRef.current = tags;
 
   useEffect(() => {
     noteIdRef.current = noteId;
@@ -59,6 +115,7 @@ function QuickNoteContent() {
         orderedList: { keepMarks: true, keepAttributes: false },
       }),
       UnderlineExtension,
+      HighlightExtension,
       Placeholder.configure({
         placeholder: "Start writing your note...",
       }),
@@ -66,46 +123,61 @@ function QuickNoteContent() {
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "tiptap quick-note-editor focus:outline-none min-h-[400px] text-[15px] leading-relaxed text-foreground",
+        class:
+          "tiptap quick-note-editor focus:outline-none min-h-[120px] text-[15px] leading-relaxed text-foreground",
       },
     },
     onUpdate: ({ editor }) => {
-      debouncedSave(editor.getHTML(), editor.getText());
+      debouncedSave(editor.getJSON(), editor.getText());
     },
   });
 
   // Load existing note
   useEffect(() => {
     if (!noteId) {
+      initialLoadDone.current = false;
+      setNotFound(false);
       setLoading(false);
+      editor?.commands.setContent(EMPTY_DOC, { emitUpdate: false });
       return;
     }
 
+    if (!editor) return;
+
     const loadNote = async () => {
+      initialLoadDone.current = false;
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       setLoading(true);
       setNotFound(false);
+      setTagPopoverOpen(false);
+      setTagSearch("");
       try {
         const workspaceId = await resolveWorkspaceId();
         if (!workspaceId) return;
 
-        const res = await api.get<{ data: any[] }>(
+        const res = await api.get<{ data: QuickNoteRecord[] }>(
           `/workspaces/${workspaceId}/item/quick-note`,
         );
 
-        const note = res.data.find((n: any) => n.id === noteId);
+        const note = res.data.find((n) => n.id === noteId);
         if (!note) {
           setNotFound(true);
           return;
         }
 
+        const noteTags = note.tags || [];
+        const documentContent = isTiptapDoc(note.contentJson)
+          ? note.contentJson
+          : textToDocument(note.contentString);
+
         setTitle(note.title || "");
-        if (editor && note.contentString) {
-          const paragraphs = note.contentString
-            .split("\n")
-            .map((p: string) => `<p>${p || "<br>"}</p>`)
-            .join("");
-          editor.commands.setContent(paragraphs);
-        }
+        setTags(noteTags);
+        setAvailableTags((prev) => Array.from(new Set([...prev, ...noteTags])));
+        currentContentRef.current = {
+          content: note.contentString || "",
+          contentJson: documentContent,
+        };
+        editor.commands.setContent(documentContent, { emitUpdate: false });
         initialLoadDone.current = true;
       } catch (err) {
         console.error("Failed to load note:", err);
@@ -119,7 +191,14 @@ function QuickNoteContent() {
   }, [noteId, editor]);
 
   const saveNote = useCallback(
-    async (htmlContent?: string, plainText?: string) => {
+    async (
+      changes: {
+        content?: string;
+        contentJson?: JSONContent;
+        title?: string;
+        tags?: string[];
+      } = {},
+    ) => {
       const currentNoteId = noteIdRef.current;
       if (!currentNoteId) return;
 
@@ -128,43 +207,79 @@ function QuickNoteContent() {
         const workspaceId = await resolveWorkspaceId();
         if (!workspaceId) return;
 
-        const payload: Record<string, any> = {};
-        if (title !== undefined) payload.title = title;
-        if (plainText !== undefined) payload.content = plainText;
+        const payload: {
+          title: string;
+          tags: string[];
+          content?: string;
+          contentJson?: JSONContent;
+        } = {
+          title: changes.title ?? latestTitleRef.current,
+          tags: changes.tags ?? latestTagsRef.current,
+        };
+
+        if (changes.content !== undefined) {
+          payload.content = changes.content;
+          currentContentRef.current.content = changes.content;
+        }
+        if (changes.contentJson !== undefined) {
+          payload.contentJson = changes.contentJson;
+          currentContentRef.current.contentJson = changes.contentJson;
+        }
 
         await api.patch(
           `/workspaces/${workspaceId}/item/quick-note/${currentNoteId}`,
-          payload
+          payload,
         );
+
         setLastSaved(new Date());
+        window.dispatchEvent(
+          new CustomEvent("hm:quick-note-updated", {
+            detail: {
+              id: currentNoteId,
+              title: payload.title,
+              contentString:
+                payload.content ?? currentContentRef.current.content,
+              tags: payload.tags,
+              updatedAt: new Date().toISOString(),
+            },
+          }),
+        );
       } catch (err) {
         console.error("Failed to save note:", err);
       } finally {
         setIsSaving(false);
       }
     },
-    [title]
+    [],
   );
 
   const debouncedSave = useCallback(
-    (html: string, text: string) => {
+    (contentJson: JSONContent, text: string) => {
       if (!initialLoadDone.current) return;
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
-        saveNote(html, text);
+        void saveNote({ content: text, contentJson });
       }, 800);
     },
-    [saveNote]
+    [saveNote],
   );
 
   // Save title on change (debounced)
   useEffect(() => {
     if (!noteId || !initialLoadDone.current) return;
     const timeout = setTimeout(() => {
-      saveNote();
+      void saveNote();
     }, 800);
     return () => clearTimeout(timeout);
-  }, [title]);
+  }, [noteId, saveNote, title]);
+
+  useEffect(() => {
+    if (!noteId || !initialLoadDone.current) return;
+    const timeout = setTimeout(() => {
+      void saveNote();
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [noteId, saveNote, tags]);
 
   // Cleanup
   useEffect(() => {
@@ -173,59 +288,46 @@ function QuickNoteContent() {
     };
   }, []);
 
-  // N key shortcut
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      const isInput =
-        activeEl instanceof HTMLInputElement ||
-        activeEl instanceof HTMLTextAreaElement ||
-        (activeEl as HTMLElement).isContentEditable;
-
-      if (isInput) return;
-
-      if (
-        e.key.toLowerCase() === "n" &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey
-      ) {
-        e.preventDefault();
-        router.push("/dashboard/quick-note/new");
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [router]);
-
   const showToast = (message: string) => {
     setToast({ visible: true, message });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleAddTag = () => {
-    const tag = tagInput.trim();
-    if (tag && !tags.includes(tag)) {
-      setTags((prev) => [...prev, tag]);
-      setTagInput("");
-    }
+  const handleToggleTag = (tag: string) => {
+    setTags((prev) => {
+      if (prev.includes(tag)) {
+        return prev.filter((t) => t !== tag);
+      } else {
+        return [...prev, tag];
+      }
+    });
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags((prev) => prev.filter((t) => t !== tagToRemove));
+  const handleCreateTag = (newTagRaw: string) => {
+    const newTag = newTagRaw.trim().toLowerCase();
+    if (!newTag) return;
+
+    if (!availableTags.includes(newTag)) {
+      setAvailableTags([...availableTags, newTag]);
+    }
+    setTags((prev) => {
+      if (!prev.includes(newTag)) {
+        return [...prev, newTag];
+      }
+      return prev;
+    });
+    setTagSearch("");
   };
 
-  const handleTagKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleAddTag();
+  useEffect(() => {
+    if (tagPopoverOpen && tagInputRef.current) {
+      tagInputRef.current.focus();
     }
-    if (e.key === "Escape") {
-      setShowTagInput(false);
-      setTagInput("");
-    }
-  };
+  }, [tagPopoverOpen]);
+
+  const filteredTagsList = availableTags.filter((tag) =>
+    tag.toLowerCase().includes(tagSearch.toLowerCase()),
+  );
 
   const toolbarItems = [
     {
@@ -247,10 +349,10 @@ function QuickNoteContent() {
       isActive: () => editor?.isActive("underline") ?? false,
     },
     {
-      icon: Heading2,
-      label: "Heading",
-      action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(),
-      isActive: () => editor?.isActive("heading", { level: 2 }) ?? false,
+      icon: Highlighter,
+      label: "Highlight",
+      action: () => editor?.chain().focus().toggleHighlight().run(),
+      isActive: () => editor?.isActive("highlight") ?? false,
     },
     {
       icon: List,
@@ -266,7 +368,7 @@ function QuickNoteContent() {
     },
   ];
 
-  // No note ID — show empty state
+  // No note ID - show empty state
   if (!noteId) {
     return (
       <div className="flex items-center justify-center h-full bg-background">
@@ -291,7 +393,9 @@ function QuickNoteContent() {
       <div className="flex items-center justify-center h-full bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          <span className="text-[13px] text-muted-foreground">Loading note...</span>
+          <span className="text-[13px] text-muted-foreground">
+            Loading note...
+          </span>
         </div>
       </div>
     );
@@ -304,7 +408,9 @@ function QuickNoteContent() {
           <div className="w-12 h-12 rounded-full border border-border bg-surface flex items-center justify-center text-muted-foreground mb-4 shadow-sm">
             <FileText className="w-5 h-5" />
           </div>
-          <p className="text-[14px] font-medium text-foreground mb-1">Note not found</p>
+          <p className="text-[14px] font-medium text-foreground mb-1">
+            Note not found
+          </p>
           <p className="text-[13px] text-muted-foreground">
             This note may have been deleted.
           </p>
@@ -323,106 +429,128 @@ function QuickNoteContent() {
         </div>
       )}
 
-      {/* HEADER: Title + Tags */}
-      <div className="shrink-0">
-        <div className="max-w-[720px] w-full mx-auto px-6 md:px-0 pt-10">
-          <div className="flex items-start justify-between gap-4">
-            <input
-              ref={titleRef}
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Untitled Note"
-              className="flex-1 bg-transparent text-[28px] font-bold text-foreground placeholder:text-muted-foreground/20 focus:outline-none border-none leading-tight tracking-tight"
-            />
+      <div className="flex flex-col flex-1 min-h-0 max-w-[720px] w-full mx-auto px-6 md:px-0 pt-10 pb-8">
+        {/* TOP ROW: TITLE + TAGS */}
+        <div className="flex items-start justify-between gap-6 mb-6 shrink-0 relative">
+          <input
+            ref={titleRef}
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Untitled Note"
+            className="flex-1 bg-transparent text-[30px] font-semibold text-foreground placeholder:text-muted-foreground/25 focus:outline-none border-none leading-tight min-w-0"
+          />
 
-            <div className="flex items-center gap-2 shrink-0 mt-1">
+          <div className="flex items-center gap-3 shrink-0 mt-1.5">
+            <div className="relative">
               <button
-                onClick={() => {
-                  setShowTagInput(!showTagInput);
-                  setTimeout(() => tagInputRef.current?.focus(), 50);
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                type="button"
+                onClick={() => setTagPopoverOpen(!tagPopoverOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 <Tag className="w-3.5 h-3.5" />
-                Tags
+                <span>Tags</span>
+                <span className="ml-0.5 bg-muted text-foreground px-1.5 py-0.5 rounded-sm text-[10px] leading-none font-semibold">
+                  {tags.length}
+                </span>
               </button>
-
-              {/* Auto-save indicator */}
-              {isSaving ? (
-                <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1.5 px-2">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Saving...
-                </span>
-              ) : lastSaved ? (
-                <span className="text-[11px] text-muted-foreground/40 px-2">
-                  Auto-saved
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {(tags.length > 0 || showTagInput) && (
-            <div className="flex items-center flex-wrap gap-1.5 mt-3">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-[11px] font-medium text-muted-foreground border border-border/50"
-                >
-                  {tag}
-                  <button
-                    onClick={() => handleRemoveTag(tag)}
-                    className="hover:text-foreground transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-              {showTagInput && (
-                <input
-                  ref={tagInputRef}
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  onBlur={() => {
-                    if (tagInput.trim()) handleAddTag();
-                    else setShowTagInput(false);
-                  }}
-                  placeholder="Add tag..."
-                  className="bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none border-none w-24"
-                />
+              {tagPopoverOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setTagPopoverOpen(false)}
+                  />
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col">
+                    <div className="p-2 border-b border-border flex items-center gap-2">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                      <input
+                        ref={tagInputRef}
+                        type="text"
+                        value={tagSearch}
+                        onChange={(e) => setTagSearch(e.target.value)}
+                        placeholder="Search or create tag..."
+                        className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto py-1 scrollbar-thin">
+                      {filteredTagsList.map((tag) => {
+                        const isSelected = tags.includes(tag);
+                        return (
+                          <div
+                            key={tag}
+                            onClick={() => handleToggleTag(tag)}
+                            className="px-3 py-2 mt-1 mx-1 rounded-md text-[13px] text-foreground hover:bg-muted cursor-pointer flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="truncate">{tag}</span>
+                            </div>
+                            {isSelected && (
+                              <CheckCircle className="w-3.5 h-3.5 text-primary" />
+                            )}
+                          </div>
+                        );
+                      })}
+                      {tagSearch.trim() &&
+                        !availableTags.includes(
+                          tagSearch.trim().toLowerCase(),
+                        ) && (
+                          <div
+                            onClick={() => handleCreateTag(tagSearch)}
+                            className="px-3 py-2 mt-1 mx-1 rounded-md text-[13px] text-foreground hover:bg-muted cursor-pointer flex items-center gap-2 border-t border-border/50"
+                          >
+                            <span className="text-muted-foreground">
+                              Create
+                            </span>
+                            <span className="font-semibold px-1.5 py-0.5 bg-muted rounded text-[11px] text-foreground">
+                              &quot;{tagSearch.trim().toLowerCase()}&quot;
+                            </span>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
-          )}
 
-          <div className="h-px bg-border/30 mt-5" />
+            {/* Auto-save indicator */}
+            {isSaving ? (
+              <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1.5 absolute right-0 top-[-24px]">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Saving...
+              </span>
+            ) : lastSaved ? (
+              <span className="text-[11px] text-muted-foreground/40 absolute right-0 top-[-24px]">
+                Auto-saved
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      {/* EDITOR — Notion-style centered */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide">
-        <div className="max-w-[720px] w-full mx-auto px-6 md:px-0 pt-6 pb-32">
-          <EditorContent editor={editor} />
+        {/* TOP DIVIDER */}
+        <div className="h-px bg-border/60 w-full mb-6 shrink-0" />
+
+        {/* EDITOR AREA */}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide flex flex-col mb-4">
+          <EditorContent editor={editor} className="flex-1 cursor-text" />
         </div>
-      </div>
 
-      {/* BOTTOM BAR: Toolbar (horizontal) | separator | Actions */}
-      <div className="shrink-0 border-t border-border/30">
-        <div className="flex items-center px-4 md:px-6 py-2 gap-0">
-          <div className="flex items-center gap-0.5">
+        {/* FORMATTING TOOLBAR */}
+        <div className="shrink-0 mb-6">
+          <div className="inline-flex items-center gap-0.5 px-2 py-1.5 border border-border rounded-md bg-surface">
             {toolbarItems.map((item) => {
               const Icon = item.icon;
               const active = item.isActive();
               return (
                 <button
+                  type="button"
                   key={item.label}
                   onClick={item.action}
                   title={item.label}
-                  className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${
+                  className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors duration-75 ${
                     active
                       ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -430,25 +558,29 @@ function QuickNoteContent() {
               );
             })}
           </div>
+        </div>
 
-          <div className="w-px h-5 bg-border/40 mx-3" />
+        {/* BOTTOM DIVIDER */}
+        <div className="h-px bg-border/60 w-full mb-6 shrink-0" />
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => showToast("Added to page")}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <FileOutput className="w-3.5 h-3.5" />
-              Add to Page
-            </button>
-            <button
-              onClick={() => showToast("Added to project")}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <FolderGit2 className="w-3.5 h-3.5" />
-              Add to Project
-            </button>
-          </div>
+        {/* BOTTOM ACTION BUTTONS */}
+        <div className="shrink-0 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => showToast("Added to page")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <FileOutput className="w-3.5 h-3.5" />
+            Add to Page
+          </button>
+          <button
+            type="button"
+            onClick={() => showToast("Added to project")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <FolderGit2 className="w-3.5 h-3.5" />
+            Add to Project
+          </button>
         </div>
       </div>
     </div>
@@ -457,11 +589,13 @@ function QuickNoteContent() {
 
 export default function QuickNotePage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-full bg-background">
-        <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-full bg-background">
+          <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      }
+    >
       <QuickNoteContent />
     </Suspense>
   );
