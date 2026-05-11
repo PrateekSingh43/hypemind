@@ -280,6 +280,13 @@
 	margin-bottom: 0;
 }
 
+.quick-note-editor mark {
+	background-color: hsl(var(--primary) / 0.18);
+	color: inherit;
+	border-radius: 2px;
+	padding: 0 0.08em;
+}
+
 .quick-note-editor h1 {
 	font-size: 1.5em;
 	font-weight: 700;
