@@ -24,6 +24,9 @@ import {
 } from "lucide-react";
 
 import { SearchModal } from "./search-modal";
+import { NewProjectDialog } from "./new-project-dialog";
+import { AreaProjectAssignmentPopover } from "./area-project-assignment-popover";
+import { NewAreaDialog } from "./new-area-dialog";
 
 import { Navigator } from "../../lib/navigator";
 import {
@@ -164,6 +167,12 @@ type SidebarTreeItem = {
   title: string;
 };
 
+type AreaTreeItem = {
+  id: string;
+  title: string;
+  projects: SidebarTreeItem[];
+};
+
 type AuthMeResponse = {
   data?: {
     user?: {
@@ -195,6 +204,7 @@ export function LeftSidebar({
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     pages: false,
     quickNote: false,
@@ -202,13 +212,17 @@ export function LeftSidebar({
     projects: false,
     pinned: false,
   });
-  const [areas, setAreas] = useState<SidebarTreeItem[]>([]);
+  const [areas, setAreas] = useState<AreaTreeItem[]>([]);
   const [projects, setProjects] = useState<SidebarTreeItem[]>([]);
   const [areasLoading, setAreasLoading] = useState(true);
   const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
   const [quickNotes, setQuickNotes] = useState<QuickNoteSummary[]>([]);
   const [quickNotesLoading, setQuickNotesLoading] = useState(false);
   const [isCreatingQuickNote, setIsCreatingQuickNote] = useState(false);
+  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
+  const [isNewAreaDialogOpen, setIsNewAreaDialogOpen] = useState(false);
+  const [isAreaProjectPopoverOpen, setIsAreaProjectPopoverOpen] = useState(false);
+  const [activeAreaIdForProject, setActiveAreaIdForProject] = useState<string | undefined>();
 
   const currentWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
@@ -228,6 +242,31 @@ export function LeftSidebar({
       console.error("Failed to fetch quick notes for sidebar:", err);
     } finally {
       setQuickNotesLoading(false);
+    }
+  }, [activeWorkspaceId]);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+      const res = await api.get<{ data: any[] }>(`/workspaces/${workspaceId}/project`);
+      setProjects(res.data.map((p) => ({ id: p.id, title: p.title })));
+    } catch (err) {
+      console.error("Failed to fetch projects for sidebar:", err);
+    }
+  }, [activeWorkspaceId]);
+
+  const fetchAreas = useCallback(async () => {
+    setAreasLoading(true);
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+      const res = await api.get<{ data: any[] }>(`/workspaces/${workspaceId}/area`);
+      setAreas(res.data.map((a) => ({ id: a.id, title: a.title, projects: a.projects })));
+    } catch (err) {
+      console.error("Failed to fetch areas for sidebar:", err);
+    } finally {
+      setAreasLoading(false);
     }
   }, [activeWorkspaceId]);
 
@@ -272,10 +311,17 @@ export function LeftSidebar({
   }, []);
 
   useEffect(() => {
-    const fetchSessionAndWorkspaces = async () => {
+    let cancelled = false;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 1000;
+
+    const fetchSessionAndWorkspaces = async (attempt = 0) => {
+      if (cancelled) return;
       setIsWorkspaceLoading(true);
       try {
         const res = await api.get<AuthMeResponse>("/auth/me");
+        if (cancelled) return;
+
         const rawName = res.data?.user?.name || res.data?.name;
         const rawEmail = res.data?.user?.email || res.data?.email;
         const defaultWorkspaceId = res.data?.user?.workspaceId ?? null;
@@ -298,6 +344,8 @@ export function LeftSidebar({
         const workspaceRes = await api.get<{ data: WorkspaceSummary[] }>(
           "/workspaces",
         );
+        if (cancelled) return;
+
         setWorkspaces(workspaceRes.data);
 
         const storedWorkspaceId = getWorkspaceId();
@@ -316,30 +364,46 @@ export function LeftSidebar({
             storeWorkspaceId(nextWorkspace.id);
           }
         }
-      } catch {
-        setUserName("User");
-      } finally {
         setIsWorkspaceLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn(
+          `[sidebar] fetchSessionAndWorkspaces failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}):`,
+          err,
+        );
+        if (attempt < MAX_RETRIES) {
+          const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
+          await new Promise((r) => globalThis.setTimeout(r, delay));
+          if (!cancelled) {
+            return fetchSessionAndWorkspaces(attempt + 1);
+          }
+        } else {
+          setUserName("User");
+          setIsWorkspaceLoading(false);
+        }
       }
     };
     fetchSessionAndWorkspaces();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     setAreas([]);
-    setProjects([]);
-    setAreasLoading(false);
-  }, [activeWorkspaceId]);
+    void fetchProjects();
+    void fetchAreas();
+  }, [activeWorkspaceId, fetchProjects, fetchAreas]);
 
   useEffect(() => {
     return subscribeToWorkspaceChange((workspaceId) => {
       setActiveWorkspaceId(workspaceId);
       setQuickNotes([]);
       setAreas([]);
-      setProjects([]);
-      setAreasLoading(false);
+      void fetchProjects();
+      void fetchAreas();
     });
-  }, []);
+  }, [fetchProjects, fetchAreas]);
 
   const { setTheme, resolvedTheme } = useTheme();
 
@@ -421,6 +485,102 @@ export function LeftSidebar({
   const toggle = (section: string) =>
     setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
 
+  const handleCreateProject = (e: React.MouseEvent, areaId?: string) => {
+    e.stopPropagation();
+    if (areaId) {
+      setActiveAreaIdForProject(areaId);
+      setIsAreaProjectPopoverOpen(true);
+    } else {
+      setActiveAreaIdForProject(undefined);
+      setIsNewProjectDialogOpen(true);
+    }
+  };
+
+  const handleCreateArea = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsNewAreaDialogOpen(true);
+  };
+
+  const handleNewProjectSubmit = async ({ title, description, tags, areaId }: { title: string; description: string; tags: string[]; areaId?: string }) => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+
+      const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/project`, {
+        title,
+        description,
+        tags,
+        areaId,
+      });
+
+      const newProject = res.data;
+      if (areaId) {
+        setAreas((prev) =>
+          prev.map((a) =>
+            a.id === areaId
+              ? { ...a, projects: [{ id: newProject.id, title: newProject.title }, ...a.projects] }
+              : a
+          )
+        );
+        setExpanded((prev) => ({ ...prev, area: true }));
+        setOpenAreas((prev) => ({ ...prev, [areaId]: true }));
+      } else {
+        setProjects((prev) => [
+          { id: newProject.id, title: newProject.title },
+          ...prev.filter((p) => p.id !== newProject.id),
+        ]);
+        setExpanded((prev) => ({ ...prev, projects: true }));
+      }
+      router.push(Navigator.project(newProject.id));
+    } catch (err) {
+      console.error("Failed to create project:", err);
+    }
+  };
+
+  const handleAssignProjectToArea = async (projectIds: string[]) => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId || !activeAreaIdForProject) return;
+
+      await Promise.all(
+        projectIds.map((projectId) =>
+          api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${projectId}`, {
+            areaId: activeAreaIdForProject,
+          })
+        )
+      );
+
+      // Refresh data
+      await Promise.all([fetchProjects(), fetchAreas()]);
+      setIsAreaProjectPopoverOpen(false);
+      setOpenAreas((prev) => ({ ...prev, [activeAreaIdForProject]: true }));
+      setExpanded((prev) => ({ ...prev, area: true }));
+    } catch (err) {
+      console.error("Failed to assign projects to area:", err);
+    }
+  };
+
+  const handleNewAreaSubmit = async ({ title, description }: { title: string; description: string }) => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+
+      const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/area`, {
+        title,
+        description,
+      });
+
+      const newArea = res.data;
+      setAreas((prev) => [
+        { id: newArea.id, title: newArea.title, projects: [] },
+        ...prev.filter((a) => a.id !== newArea.id),
+      ]);
+      setExpanded((prev) => ({ ...prev, area: true }));
+    } catch (err) {
+      console.error("Failed to create area:", err);
+    }
+  };
+
   const toggleArea = (id: string) => {
     setOpenAreas((prev) => {
       const isCurrentlyOpen = !!prev[id];
@@ -470,6 +630,30 @@ export function LeftSidebar({
       setIsCreatingWorkspace(false);
     }
   };
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return (
+      <div className="flex flex-col border-r border-border bg-surface w-full h-full font-sans antialiased text-foreground">
+        <div className="h-10 flex items-center px-1 mx-2 mt-3 mb-3 rounded-md">
+          <div className="w-5 h-5 bg-primary rounded-[4px] flex items-center justify-center shrink-0 ml-1">
+            <div className="w-2.5 h-2.5 bg-primary-foreground rounded-sm" />
+          </div>
+          {!isCollapsed && (
+            <div className="flex items-center ml-2 gap-1 flex-1 min-w-0 px-1.5 py-1">
+              <span className="text-[14px] font-medium truncate text-foreground">
+                HypeMind
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex-1" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col border-r border-border bg-surface w-full h-full font-sans antialiased text-foreground">
@@ -706,6 +890,18 @@ export function LeftSidebar({
                 <span className="text-[13px] font-medium transition-colors duration-75 leading-5 flex-1 truncate">
                   Quick Notes
                 </span>
+                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                  <div
+                    className="flex items-center justify-center transition-transform duration-200"
+                    style={{
+                      transform: expanded["quickNote"]
+                        ? "rotate(90deg)"
+                        : "rotate(0deg)",
+                    }}
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </div>
+                </div>
                 <div className="flex items-center gap-0.5 ml-1 opacity-70 group-hover:opacity-100 transition-opacity duration-75">
                   <div className="relative group/tooltip flex items-center">
                     <button
@@ -731,18 +927,6 @@ export function LeftSidebar({
                         N
                       </kbd>
                     </div>
-                  </div>
-                </div>
-                <div className="w-5 flex shrink-0 items-center justify-end text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                  <div
-                    className="flex items-center justify-center transition-transform duration-200"
-                    style={{
-                      transform: expanded["quickNote"]
-                        ? "rotate(90deg)"
-                        : "rotate(0deg)",
-                    }}
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
                   </div>
                 </div>
               </div>
@@ -852,7 +1036,7 @@ export function LeftSidebar({
                 <div
                   className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Create project"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={handleCreateProject}
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </div>
@@ -914,7 +1098,7 @@ export function LeftSidebar({
                 <div
                   className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Create area"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={handleCreateArea}
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </div>
@@ -935,22 +1119,51 @@ export function LeftSidebar({
                 )}
                 {!areasLoading &&
                   areas.map((area) => (
-                    <div
-                      key={area.id}
-                      className="group/area flex items-center mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75"
-                      style={{ paddingLeft: `${8 + 1 * 16}px` }}
-                      onClick={() => toggleArea(area.id)}
-                    >
-                      <div className="w-5 flex shrink-0 items-center justify-start">
-                        {openAreas[area.id] ? (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        )}
+                    <div key={area.id} className="flex flex-col">
+                      <div
+                        className="group/area flex items-center mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75"
+                        style={{ paddingLeft: `${8 + 1 * 16}px` }}
+                        onClick={() => toggleArea(area.id)}
+                      >
+                        <div className="w-5 flex shrink-0 items-center justify-start">
+                          {openAreas[area.id] ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          )}
+                        </div>
+                        <span className="text-[13px] font-medium truncate leading-5 flex-1">
+                          {area.title}
+                        </span>
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover/area:opacity-100 transition-opacity duration-75 ml-1">
+                          <div
+                            className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
+                            title="Add a project in area"
+                            onClick={(e) => handleCreateProject(e, area.id)}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-[13px] font-medium truncate leading-5 flex-1">
-                        {area.title}
-                      </span>
+                      
+                      {openAreas[area.id] && (
+                        <div className="mt-0.5 space-y-0.5">
+                          {area.projects.length === 0 && (
+                            <div className="px-8 py-1 text-[12px] text-muted-foreground" style={{ paddingLeft: `${8 + 2 * 16}px` }}>
+                              No projects in this area.
+                            </div>
+                          )}
+                          {area.projects.map((project) => (
+                            <SidebarItem
+                              key={project.id}
+                              label={project.title}
+                              level={2}
+                              href={Navigator.project(project.id)}
+                              active={isRouteActive(pathname, Navigator.project(project.id))}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
               </>
@@ -980,6 +1193,26 @@ export function LeftSidebar({
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
+      />
+      <NewProjectDialog
+        isOpen={isNewProjectDialogOpen}
+        onClose={() => setIsNewProjectDialogOpen(false)}
+        onSubmit={(data) => handleNewProjectSubmit({ ...data, areaId: activeAreaIdForProject })}
+      />
+      <AreaProjectAssignmentPopover
+        isOpen={isAreaProjectPopoverOpen}
+        onClose={() => setIsAreaProjectPopoverOpen(false)}
+        projects={[...projects, ...areas.flatMap((a) => a.projects)]}
+        onAssign={handleAssignProjectToArea}
+        onCreateAndAssign={(title, description, tags) => {
+          handleNewProjectSubmit({ title, description, tags, areaId: activeAreaIdForProject });
+          setIsAreaProjectPopoverOpen(false);
+        }}
+      />
+      <NewAreaDialog
+        isOpen={isNewAreaDialogOpen}
+        onClose={() => setIsNewAreaDialogOpen(false)}
+        onSubmit={handleNewAreaSubmit}
       />
     </div>
   );

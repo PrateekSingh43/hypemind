@@ -2,6 +2,9 @@
   "name": "hypemind",
   "private": true,
   "scripts": {
+    "kill-ports": "kill-port 3000 3001 4000",
+    "clean-locks": "node -e \"try{require('fs').unlinkSync('apps/web/.next/dev/lock')}catch(e){}\"",
+    "predev": "pnpm kill-ports || true && pnpm clean-locks || true",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
@@ -9,6 +12,7 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "kill-port": "^2.0.1",
     "prettier": "^3.7.4",
     "turbo": "^2.7.6",
     "typescript": "5.9.2"
