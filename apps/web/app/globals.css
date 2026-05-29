@@ -308,6 +308,21 @@
 	margin-bottom: 0.3em;
 }
 
+.quick-note-editor strong,
+.quick-note-editor b {
+	font-weight: 700;
+	color: hsl(var(--foreground));
+}
+
+.quick-note-editor em,
+.quick-note-editor i {
+	font-style: italic;
+}
+
+.quick-note-editor u {
+	text-decoration: underline;
+}
+
 .quick-note-editor p.is-editor-empty:first-child::before {
 	color: hsl(var(--muted-foreground) / 0.3);
 	font-style: normal;
@@ -341,4 +356,28 @@
 
 .search-modal-animate {
 	animation: search-modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Notion-style Editor Block Handles */
+.drag-handle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
+	background-color: transparent;
+	color: #8A8F98;
+	cursor: grab;
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.drag-handle:hover {
+	background-color: #26272B;
+	color: #EEEEEE;
+}
+
+.drag-handle svg {
+	width: 16px;
+	height: 16px;
 }

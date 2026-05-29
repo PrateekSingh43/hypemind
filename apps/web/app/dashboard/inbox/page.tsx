@@ -8,6 +8,9 @@ import {
   ExternalLink, Info, FilePlus
 } from 'lucide-react';
 import { Navigator } from '../../../lib/navigator';
+import { ItemContentView } from '../../../components/dashboard/item-content-view';
+import { ProjectAssignmentPopover } from '../../../components/dashboard/project-assignment-popover';
+import { api, resolveWorkspaceId } from '../../../lib/api';
 
 type InboxItem = {
   id: string;
@@ -18,34 +21,10 @@ type InboxItem = {
   tags?: string[];
 };
 
-const MOCK_ITEMS: InboxItem[] = [
-  {
-    id: '1',
-    title: 'API edge cases',
-    type: 'link',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    content: 'Need to handle 404s gracefully without red banners on the frontend. Ensure the fetch wrapper catches and maps to empty states.',
-  },
-  {
-    id: '2',
-    title: 'Auth flow improvement',
-    type: 'note',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    content: 'The login redirect after signup is broken on safari. Need to inv...'
-  },
-  {
-    id: '3',
-    title: 'Design token audit',
-    type: 'video',
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    content: 'The concept of the video is to review all color token across the desi...'
-  }
-];
-
-const MOCK_PROJECTS = [
-  { id: 'p1', name: 'HypeMind Dashboard', recent: true },
-  { id: 'p2', name: 'AI Core Features', recent: true },
-];
+type ProjectItem = {
+  id: string;
+  title: string;
+};
 
 const INITIAL_TAGS = ['ui', 'bug', 'backend', 'ai', 'planning'];
 
@@ -87,18 +66,52 @@ function formatRelativeTime(dateISO: string) {
 
 export default function InboxPage() {
   const router = useRouter();
-  const [items, setItems] = useState<InboxItem[]>(MOCK_ITEMS);
-  const [loading] = useState(false);
+  const [items, setItems] = useState<InboxItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem('hypemind_inbox_selected');
-    if (saved && items.some(i => i.id === saved)) {
-      setSelectedId(saved);
-    } else if (items.length > 0) {
-      setSelectedId(items[0].id);
+  const fetchInboxData = async () => {
+    setLoading(true);
+    try {
+      const workspaceId = await resolveWorkspaceId();
+      if (!workspaceId) return;
+
+      const [itemsRes, projectsRes] = await Promise.all([
+        api.get<{ data: InboxItem[] }>(`/workspaces/${workspaceId}/item/inbox`),
+        api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project`)
+      ]);
+
+      const fetchedItems = itemsRes.data || [];
+      setItems(fetchedItems);
+      setProjects(projectsRes.data || []);
+
+      const saved = localStorage.getItem('hypemind_inbox_selected');
+      if (saved && fetchedItems.some(i => i.id === saved)) {
+        setSelectedId(saved);
+      } else if (fetchedItems.length > 0) {
+        setSelectedId(fetchedItems[0].id);
+      } else {
+        setSelectedId(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch inbox data:", error);
+    } finally {
+      setLoading(false);
     }
-  }, [items]);
+  };
+
+  useEffect(() => {
+    void fetchInboxData();
+  }, []);
+
+  useEffect(() => {
+    const handleWorkspaceChange = () => {
+      void fetchInboxData();
+    };
+    window.addEventListener('hm:workspace-changed', handleWorkspaceChange);
+    return () => window.removeEventListener('hm:workspace-changed', handleWorkspaceChange);
+  }, []);
 
   useEffect(() => {
     if (selectedId) {
@@ -107,8 +120,6 @@ export default function InboxPage() {
   }, [selectedId]);
 
   const [projectPopoverOpen, setProjectPopoverOpen] = useState(false);
-  const [projectSearch, setProjectSearch] = useState('');
-
   const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [tagSearch, setTagSearch] = useState('');
@@ -187,24 +198,53 @@ export default function InboxPage() {
   }, [filteredItems, selectedId, projectPopoverOpen, tagPopoverOpen]);
 
   useEffect(() => {
-    if (projectPopoverOpen && projectInputRef.current) projectInputRef.current.focus();
-  }, [projectPopoverOpen]);
-
-  useEffect(() => {
     if (tagPopoverOpen && tagInputRef.current) tagInputRef.current.focus();
   }, [tagPopoverOpen]);
 
-  const handleAssignToProject = async (projectName: string, projectId?: string) => {
+  const handleAssignToProject = async (projectId: string, projectName: string) => {
     if (!selectedId) return;
-    setProjectPopoverOpen(false);
-    setProjectSearch('');
-    const idToProcess = selectedId;
-    const currentIndex = items.findIndex(i => i.id === selectedId);
-    const nextItem = items[currentIndex + 1] || items[currentIndex - 1];
-    setSelectedId(nextItem ? nextItem.id : null);
-    setItems(prev => prev.filter(i => i.id !== idToProcess));
-    setToast({ visible: true, message: 'Added to', projectName, projectId });
-    setTimeout(() => setToast(null), 6000);
+    try {
+      const workspaceId = await resolveWorkspaceId();
+      if (!workspaceId) return;
+
+      await api.patch(`/workspaces/${workspaceId}/item/${selectedId}`, {
+        projectId
+      });
+
+      setProjectPopoverOpen(false);
+      
+      const idToProcess = selectedId;
+      const currentIndex = items.findIndex(i => i.id === selectedId);
+      const nextItem = items[currentIndex + 1] || items[currentIndex - 1];
+      setSelectedId(nextItem ? nextItem.id : null);
+      setItems(prev => prev.filter(i => i.id !== idToProcess));
+      
+      setToast({ visible: true, message: 'Added to', projectName, projectId });
+      setTimeout(() => setToast(null), 6000);
+    } catch (err) {
+      console.error("Failed to assign to project:", err);
+    }
+  };
+
+  const handleCreateAndAssignProject = async (title: string, desc: string, tags: string[]) => {
+    if (!selectedId || !title.trim()) return;
+    try {
+      const workspaceId = await resolveWorkspaceId();
+      if (!workspaceId) return;
+
+      // Create project
+      const res = await api.post<{ data: { id: string, title: string } }>(`/workspaces/${workspaceId}/project`, {
+        title,
+        description: desc,
+        tags
+      });
+      const newProject = res.data;
+
+      // Assign to newly created project
+      await handleAssignToProject(newProject.id, newProject.title);
+    } catch (err) {
+      console.error("Failed to create and assign project:", err);
+    }
   };
 
   const handleToggleTag = (tag: string) => {
@@ -233,16 +273,13 @@ export default function InboxPage() {
     setTagSearch('');
   };
 
-  const filteredProjects = MOCK_PROJECTS.filter(p => p.name.toLowerCase().includes(projectSearch.toLowerCase()));
-  const recentProjects = filteredProjects.filter(p => p.recent);
-  const otherProjects = filteredProjects.filter(p => !p.recent);
   const filteredTagsList = availableTags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
   const allItemTags = Array.from(new Set(items.flatMap(i => i.tags || [])));
 
   return (
     <div className="flex h-full w-full text-foreground font-sans antialiased overflow-hidden relative bg-background">
       {toast?.visible && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface border border-border text-foreground px-5 py-3.5 rounded-lg shadow-2xl flex items-center gap-3 z-50 animate-in slide-in-from-bottom-5 overflow-hidden">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-surface border border-border text-foreground px-5 py-3.5 rounded-lg shadow-2xl flex items-center gap-3 z-50 animate-in slide-in-from-top-5 overflow-hidden">
           <CheckCircle className="w-4 h-4 text-primary shrink-0" />
           <span className="text-[13px]">
             {toast.message} <span className="font-semibold">&quot;{toast.projectName}&quot;</span>
@@ -488,238 +525,110 @@ export default function InboxPage() {
           </div>
         ) : (
           <>
-            <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden px-8 py-8 max-w-3xl mx-auto w-full">
-                {/* 1. TOP META / UTILITY ROW */}
-                <div className="flex items-center justify-between gap-2 mb-6 pb-6 border-b border-border/50 overflow-visible shrink-0">
-                  <div className="relative">
-                    <button
-                      onClick={() => setTagPopoverOpen(!tagPopoverOpen)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                    >
-                      <Tag className="w-3.5 h-3.5" />
-                      <span>Tags</span>
-                      <span className="ml-1 bg-muted text-foreground px-1.5 rounded-sm text-[10px]">
-                        {selectedItem.tags?.length || 0}
-                      </span>
-                    </button>
-                    {tagPopoverOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setTagPopoverOpen(false)} />
-                        <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col">
-                          <div className="p-2 border-b border-border flex items-center gap-2">
-                            <Search className="w-3.5 h-3.5 text-muted-foreground" />
-                            <input
-                              ref={tagInputRef}
-                              type="text"
-                              value={tagSearch}
-                              onChange={(e) => setTagSearch(e.target.value)}
-                              placeholder="Search or create tag..."
-                              className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
-                            />
+            <ItemContentView
+              title={selectedItem.title || ''}
+              content={selectedItem.content || ''}
+              onUpdateTitle={(val: string) => setItems(items.map(i => i.id === selectedId ? { ...i, title: val } : i))}
+              onUpdateContent={(val: string) => setItems(items.map(i => i.id === selectedId ? { ...i, content: val } : i))}
+              tagsCount={selectedItem.tags?.length || 0}
+              onTagsClick={() => setTagPopoverOpen(!tagPopoverOpen)}
+              tagsPopover={tagPopoverOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setTagPopoverOpen(false)} />
+                  <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col text-foreground">
+                    <div className="p-2 border-b border-border flex items-center gap-2">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                      <input
+                        ref={tagInputRef}
+                        type="text"
+                        value={tagSearch}
+                        onChange={(e) => setTagSearch(e.target.value)}
+                        placeholder="Search or create tag..."
+                        className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto py-1">
+                      {filteredTagsList.map(tag => {
+                        const isSelected = selectedItem.tags?.includes(tag) ?? false;
+                        return (
+                          <div
+                            key={tag}
+                            onClick={() => handleToggleTag(tag)}
+                            className="px-3 py-2 mt-1 mx-1 rounded-md text-[13px] hover:bg-muted cursor-pointer flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span className="truncate">{tag}</span>
+                            </div>
+                            {isSelected && <CheckCircle className="w-3.5 h-3.5 text-primary" />}
                           </div>
-                          <div className="max-h-64 overflow-y-auto py-1">
-                            {filteredTagsList.map(tag => {
-                              const isSelected = selectedItem.tags?.includes(tag) ?? false;
-                              return (
-                                <div
-                                  key={tag}
-                                  onClick={() => handleToggleTag(tag)}
-                                  className="px-3 py-2 mt-1 mx-1 rounded-md text-[13px] text-foreground hover:bg-muted cursor-pointer flex items-center justify-between"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                                    <span className="truncate">{tag}</span>
-                                  </div>
-                                  {isSelected && <CheckCircle className="w-3.5 h-3.5 text-primary" />}
-                                </div>
-                              );
-                            })}
-                            {tagSearch.trim() && !filteredTagsList.includes(tagSearch.trim().toLowerCase()) && (
-                              <div
-                                onClick={() => handleCreateTag(tagSearch)}
-                                className="px-3 py-2 mt-1 mx-1 rounded-md text-[13px] text-foreground hover:bg-muted cursor-pointer flex items-center gap-2 border-t border-border/50"
-                              >
-                                <span className="text-muted-foreground">Create</span>
-                                <span className="font-semibold px-1.5 py-0.5 bg-muted rounded text-[11px] text-foreground">&quot;{tagSearch.trim().toLowerCase()}&quot;</span>
-                              </div>
-                            )}
-                          </div>
+                        );
+                      })}
+                      {tagSearch.trim() && !filteredTagsList.includes(tagSearch.trim().toLowerCase()) && (
+                        <div
+                          onClick={() => handleCreateTag(tagSearch)}
+                          className="px-3 py-2 mt-1 mx-1 rounded-md text-[13px] hover:bg-muted cursor-pointer flex items-center gap-2 border-t border-border/50"
+                        >
+                          <span className="text-muted-foreground">Create</span>
+                          <span className="font-semibold px-1.5 py-0.5 bg-muted rounded text-[11px]">&quot;{tagSearch.trim().toLowerCase()}&quot;</span>
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </div>
+                </>
+              )}
+              onInfoClick={() => setInfoPopoverOpen(!infoPopoverOpen)}
+              infoPopover={infoPopoverOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setInfoPopoverOpen(false)} />
+                  <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col p-4 space-y-4 text-left">
+                    <div>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Source</span>
+                      <p className="text-[13px] text-foreground mt-1 truncate">https://example.com/source</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Author</span>
+                      <p className="text-[13px] text-foreground mt-1">Jane Doe</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</span>
+                      <p className="text-[13px] text-foreground mt-1 capitalize">{selectedItem.type}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Saved</span>
+                      <p className="text-[13px] text-foreground mt-1">{new Date(selectedItem.updatedAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+              placeholderTitle={`Untitled ${selectedItem.type.toLowerCase()}`}
+              placeholderContent="Capture your thoughts..."
+              bottomActions={
+                <div className="flex gap-3">
                   <button
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                    title="Open Source"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-[#27282B] rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
                   >
-                    <span>Open Source</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <FilePlus className="w-3.5 h-3.5" />
+                    <span>Add to Page</span>
+                  </button>
+                  <button
+                    onClick={() => setProjectPopoverOpen(!projectPopoverOpen)}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-[#EEEEEE] text-[#0E0F11] text-[12px] font-semibold hover:bg-white transition-colors shadow-sm"
+                  >
+                    <FolderGit2 className="w-3.5 h-3.5" />
+                    <span>Add to Project</span>
                   </button>
                 </div>
+              }
+            />
 
-                {/* 2. MAIN CONTENT SECTION */}
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                  {/* Title Area - Fixed */}
-                  <div className="flex items-center gap-2 relative shrink-0 mb-4 max-w-full">
-                    <div className="grid min-w-0">
-                      <div className="invisible whitespace-pre col-start-1 row-start-1 text-[24px] font-semibold overflow-hidden">
-                        {(selectedItem.title || '') + ' '}
-                        {!selectedItem.title ? `Untitled ${selectedItem.type.toLowerCase()} ` : ''}
-                      </div>
-                      <input
-                        type="text"
-                        size={1}
-                        value={selectedItem.title || ''}
-                        onChange={(e) => setItems(items.map(i => i.id === selectedId ? { ...i, title: e.target.value } : i))}
-                        placeholder={`Untitled ${selectedItem.type.toLowerCase()}`}
-                        className="col-start-1 row-start-1 w-full bg-transparent text-[24px] font-semibold text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0 min-w-0 py-0 px-0"
-                      />
-                    </div>
-                    <div className="relative shrink-0 flex items-center h-full">
-                      <button
-                        onClick={() => setInfoPopoverOpen(!infoPopoverOpen)}
-                        className="w-7 h-7 rounded-md border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
-                        title="Info"
-                      >
-                        <Info className="w-4 h-4" />
-                      </button>
-                      {infoPopoverOpen && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setInfoPopoverOpen(false)} />
-                          <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col p-4 space-y-4">
-                            <div>
-                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Source</span>
-                              <p className="text-[13px] text-foreground mt-1 truncate">https://example.com/source</p>
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Author</span>
-                              <p className="text-[13px] text-foreground mt-1">Jane Doe</p>
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</span>
-                              <p className="text-[13px] text-foreground mt-1 capitalize">{selectedItem.type}</p>
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Saved</span>
-                              <p className="text-[13px] text-foreground mt-1">{new Date(selectedItem.updatedAt).toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Body Content - Scrollable when overflowing */}
-                  <div className="flex flex-col min-h-0 shrink overflow-y-auto scrollbar-hide py-2">
-                    <div className="grid w-full">
-                      <div className="invisible whitespace-pre-wrap col-start-1 row-start-1 break-words text-[15px] leading-relaxed">
-                        {(selectedItem.content || '') + ' '}
-                      </div>
-                      <textarea
-                        value={selectedItem.content || ''}
-                        onChange={(e) => setItems(items.map(i => i.id === selectedId ? { ...i, content: e.target.value } : i))}
-                        placeholder="Capture your thoughts..."
-                        className="col-start-1 row-start-1 w-full h-full bg-transparent text-[15px] text-muted-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0 resize-none leading-relaxed overflow-hidden"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 3. BOTTOM ACTION BUTTONS SECTION */}
-                  <div className="mt-8 pt-6 border-t border-border/50 flex items-center justify-end gap-3 shrink-0">
-                    <button
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                      <FilePlus className="w-3.5 h-3.5" />
-                      <span>Add to Page</span>
-                    </button>
-                    <button
-                      onClick={() => setProjectPopoverOpen(!projectPopoverOpen)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-border rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                      <FolderGit2 className="w-3.5 h-3.5" />
-                      <span>Add to Project</span>
-                    </button>
-                  </div>
-                </div>
-            </div>
-
-            {projectPopoverOpen && (
-              <>
-                <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setProjectPopoverOpen(false)} />
-                <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-                  <div className="pointer-events-auto w-[420px] max-h-[480px] bg-surface border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden">
-                    <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
-                      <h3 className="text-[14px] font-semibold text-foreground">Add to Project</h3>
-                      <button
-                        onClick={() => setProjectPopoverOpen(false)}
-                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="px-5 py-3 border-b border-border/50 shrink-0">
-                      <div className="flex items-center gap-2.5 bg-background border border-border rounded-lg px-3 py-2">
-                        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <input
-                          ref={projectInputRef}
-                          type="text"
-                          value={projectSearch}
-                          onChange={(e) => setProjectSearch(e.target.value)}
-                          placeholder="Search projects..."
-                          className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground border-none focus:outline-none focus:ring-0"
-                        />
-                        {projectSearch && (
-                          <button onClick={() => setProjectSearch('')} className="text-muted-foreground hover:text-foreground">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="min-h-0 max-h-[340px] overflow-y-auto py-2 px-3 scrollbar-thin">
-                      {recentProjects.length > 0 && (
-                        <div className="mb-3">
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2">Recent</span>
-                          <div className="mt-1.5 space-y-[2px]">
-                            {recentProjects.map(p => (
-                              <div
-                                key={p.id}
-                                onClick={() => void handleAssignToProject(p.name, p.id)}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] text-foreground hover:bg-muted cursor-pointer transition-colors"
-                              >
-                                <FolderGit2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                                <span className="truncate">{p.name}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {otherProjects.length > 0 && (
-                        <div>
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2">All Projects</span>
-                          <div className="mt-1.5 space-y-[2px]">
-                            {otherProjects.map(p => (
-                              <div
-                                key={p.id}
-                                onClick={() => void handleAssignToProject(p.name, p.id)}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] text-foreground hover:bg-muted cursor-pointer transition-colors"
-                              >
-                                <FolderGit2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                                <span className="truncate">{p.name}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {filteredProjects.length === 0 && (
-                        <div className="px-3 py-8 text-center">
-                          <p className="text-[13px] text-muted-foreground">No projects found.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+            <ProjectAssignmentPopover
+              isOpen={projectPopoverOpen}
+              onClose={() => setProjectPopoverOpen(false)}
+              projects={projects}
+              onAssign={handleAssignToProject}
+              onCreateAndAssign={handleCreateAndAssignProject}
+            />
           </>
         )}
       </div>

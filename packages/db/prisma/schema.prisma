@@ -121,8 +121,9 @@ model Workspace {
 
   members WorkspaceMember[]
 
-  areas Area[]
-  items Item[] // All items in this workspace (including Inbox and Project items)
+  areas         Area[]
+  projects      Project[]
+  items         Item[] // All items in this workspace (including Inbox and Project items)
   tags  Tag[]
 
   settings          WorkspaceSetting?
@@ -180,7 +181,8 @@ model Area {
 
 model Project {
   id          String        @id @default(cuid())
-  areaId      String
+  workspaceId String
+  areaId      String?
   title       String
   slug        String
   description String?
@@ -193,10 +195,12 @@ model Project {
   createdById String?
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
-  area Area @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  area      Area?     @relation(fields: [areaId], references: [id], onDelete: Cascade)
 
-  @@unique([areaId, slug])
-  @@unique([areaId, title])
+  @@unique([workspaceId, slug])
+  @@unique([workspaceId, title])
+  @@index([workspaceId])
   @@index([areaId])
 }
 

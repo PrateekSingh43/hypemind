@@ -25,11 +25,11 @@ const DEFAULT_PREFS = {
 export async function getSettings(userId: string) {
 	const record = await prisma.userSetting.findUnique({
 		where: { userId },
-		select: { prefs: true, updatedAt: true },
+		select: { settings: true, updatedAt: true },
 	});
 
 	return {
-		prefs: (record?.prefs as Record<string, unknown>) ?? DEFAULT_PREFS,
+		prefs: (record?.settings as Record<string, unknown>) ?? DEFAULT_PREFS,
 		updatedAt: record?.updatedAt ?? null,
 	};
 }
@@ -52,21 +52,21 @@ export async function updateSettings(userId: string, prefs: Record<string, unkno
 	// Deep merge incoming prefs with existing
 	const existing = await prisma.userSetting.findUnique({
 		where: { userId },
-		select: { prefs: true },
+		select: { settings: true },
 	});
 
-	const currentPrefs = (existing?.prefs as Record<string, unknown>) ?? DEFAULT_PREFS;
+	const currentPrefs = (existing?.settings as Record<string, unknown>) ?? DEFAULT_PREFS;
 	const merged = deepMerge(currentPrefs, prefs);
 
 	const record = await prisma.userSetting.upsert({
 		where: { userId },
-		update: { prefs: merged as any },
-		create: { userId, prefs: merged as any },
-		select: { prefs: true, updatedAt: true },
+		update: { settings: merged as any },
+		create: { userId, settings: merged as any },
+		select: { settings: true, updatedAt: true },
 	});
 
 	return {
-		prefs: record.prefs as Record<string, unknown>,
+		prefs: record.settings as Record<string, unknown>,
 		updatedAt: record.updatedAt,
 	};
 }

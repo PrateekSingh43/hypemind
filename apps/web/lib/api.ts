@@ -3,7 +3,7 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:4000/api/v1";
 const REQUEST_TIMEOUT_MS = Number(
-  process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 30000,
+  process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 10000,
 );
 
 const WORKSPACE_ID_KEY = "hm:workspace-id:v1";
@@ -172,10 +172,26 @@ function handleAuthExpired(redirectOnAuthFailure = true) {
 async function refreshAccessToken(redirectOnAuthFailure = true) {
   if (!refreshPromise) {
     refreshPromise = (async () => {
-      const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const controller = new AbortController();
+      const timeout = globalThis.setTimeout(() => controller.abort(), 10_000);
+      let refreshRes: Response;
+      try {
+        refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+          signal: controller.signal,
+        });
+      } catch (error) {
+        const isAbortError =
+          error instanceof Error && error.name === "AbortError";
+        throw new Error(
+          isAbortError
+            ? "Auth refresh timed out"
+            : "Network error during auth refresh",
+        );
+      } finally {
+        globalThis.clearTimeout(timeout);
+      }
       const refreshPayload = await parseResponsePayload(refreshRes);
 
       if (!refreshRes.ok) {
