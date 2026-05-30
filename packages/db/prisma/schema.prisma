@@ -166,10 +166,14 @@ model Area {
   slug        String
   description String?
 
+  isPinned Boolean   @default(false)
+  pinnedAt DateTime?
+
   projects Project[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
   createdById String?
   createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -177,6 +181,7 @@ model Area {
   @@unique([workspaceId, slug])
   @@unique([workspaceId, title])
   @@index([workspaceId])
+  @@index([workspaceId, deletedAt])
 }
 
 model Project {
@@ -188,10 +193,14 @@ model Project {
   description String?
   status      ProjectStatus @default(ACTIVE)
 
+  isPinned Boolean   @default(false)
+  pinnedAt DateTime?
+
   items Item[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
   createdById String?
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -202,6 +211,7 @@ model Project {
   @@unique([workspaceId, title])
   @@index([workspaceId])
   @@index([areaId])
+  @@index([workspaceId, deletedAt])
 }
 
 enum ProjectStatus {

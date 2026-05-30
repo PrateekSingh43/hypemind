@@ -67,7 +67,7 @@ export const NotionEditor = ({ initialContent, onUpdate }: NotionEditorProps) =>
 
   useEffect(() => {
     if (editor && initialContent && editor.isEmpty) {
-      editor.commands.setContent(initialContent, false);
+      editor.commands.setContent(initialContent, { emitUpdate: false });
     }
   }, [editor, initialContent]);
 

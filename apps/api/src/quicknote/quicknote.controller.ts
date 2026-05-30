@@ -1,6 +1,6 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
-import { createQuickNoteService, getQuickNotesService, updateQuickNoteService } from "./quicknote.service";
+import { createQuickNoteService, getQuickNotesService, updateQuickNoteService, duplicateQuickNoteService } from "./quicknote.service";
 import { BadRequestError, UnauthorizedError } from "../errors/httpErrors";
 import type { AuthenticatedRequest } from "../types/auth.types";
 
@@ -51,3 +51,28 @@ export const createQuickNoteController = asyncHandler(async (req: Request, res: 
 
 
 })
+
+export const duplicateQuickNoteController = asyncHandler(async (req: Request, res: Response) => {
+	const authId = req as AuthenticatedRequest;
+	const userId = authId.user?.id;
+	const { workspaceId, itemId } = req.params;
+
+	if (!userId) {
+		throw new UnauthorizedError("You are not logged in");
+	}
+
+	if (!workspaceId || !itemId) {
+		throw new BadRequestError("Missing Workspace ID or Item ID");
+	}
+
+	try {
+		const duplicatedNote = await duplicateQuickNoteService(userId, workspaceId, itemId);
+		res.status(201).json({ success: true, data: duplicatedNote });
+	} catch (error: any) {
+		if (error.message === "Item not found") {
+			res.status(404).json({ success: false, message: "Note not found" });
+			return;
+		}
+		throw error;
+	}
+});

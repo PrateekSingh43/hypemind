@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
 	Layout,
 	FileText,
+	FilePenLine,
 	Link as LinkIcon,
 	Book,
 	ChevronRight,
@@ -23,7 +24,8 @@ import {
 	MoreVertical,
 	ExternalLink,
 	Info,
-	CheckCircle
+	CheckCircle,
+	Trash
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { ItemContentView } from '../../../../components/dashboard/item-content-view';
@@ -63,7 +65,8 @@ const FILTERS = ['All Types', 'Notes', 'Links', 'Videos', 'Docs'];
 const getIcon = (type: string) => {
 	switch (type) {
 		case 'doc': return FileIcon;
-		case 'note': return FileText;
+		case 'note': return FilePenLine;
+		case 'quick_note': return FilePenLine;
 		case 'link': return LinkIcon;
 		case 'video': return Video;
 		default: return FileText;
@@ -288,6 +291,45 @@ export default function ProjectDetailView() {
 			},
 		};
 		persist(updated);
+	};
+
+	const createNewPage = () => {
+		const id = Math.random().toString(36).substr(2, 9);
+		const newPage = {
+			title: 'Untitled Page',
+			content: { type: 'doc', content: [{ type: 'paragraph' }] },
+			tags: []
+		};
+		const updated = {
+			...projectData,
+			canvasContent: {
+				...canvasContent,
+				[id]: newPage
+			}
+		};
+		persist(updated);
+		setSelectedPageId(id);
+		localStorage.setItem(`hm_project_${projectId}_page`, id);
+	};
+
+	const deletePage = (e: React.MouseEvent, id: string) => {
+	    e.stopPropagation();
+	    const keys = Object.keys(canvasContent);
+	    if (keys.length <= 1) return; // don't delete the last page
+	    
+	    const updatedCanvas = { ...canvasContent };
+	    delete updatedCanvas[id];
+	    const updated = {
+			...projectData,
+			canvasContent: updatedCanvas
+		};
+	    persist(updated);
+	    
+	    if (selectedPageId === id) {
+	        const nextId = Object.keys(updatedCanvas)[0];
+	        setSelectedPageId(nextId);
+	        localStorage.setItem(`hm_project_${projectId}_page`, nextId);
+	    }
 	};
 
 	const updateResourceTitle = (newTitle: string) => {
@@ -632,13 +674,22 @@ export default function ProjectDetailView() {
 						<div className="px-4 py-3 shrink-0 border-b border-[#27282B]/50 flex flex-col gap-3">
 							<div className="flex items-center justify-between">
 								<span className="text-[12px] font-medium text-[#8A8F98]">Pages {Object.keys(canvasContent).length}</span>
-								<button
-									onClick={() => setShowPageFilters(!showPageFilters)}
-									className={`p-1 rounded-md transition-colors border ${showPageFilters ? 'text-primary bg-primary/10 border-primary/20' : 'text-[#8A8F98] bg-transparent border-transparent hover:text-[#EEEEEE] hover:bg-[#26272B]/50'}`}
-									title="Toggle Filters"
-								>
-									<Filter className="w-3.5 h-3.5" />
-								</button>
+								<div className="flex items-center gap-1">
+									<button
+										onClick={createNewPage}
+										className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+										title="New Page"
+									>
+										<Plus className="w-3.5 h-3.5" />
+									</button>
+									<button
+										onClick={() => setShowPageFilters(!showPageFilters)}
+										className={`p-1 rounded-md transition-colors border ${showPageFilters ? 'text-primary bg-primary/10 border-primary/20' : 'text-[#8A8F98] bg-transparent border-transparent hover:text-[#EEEEEE] hover:bg-[#26272B]/50'}`}
+										title="Toggle Filters"
+									>
+										<Filter className="w-3.5 h-3.5" />
+									</button>
+								</div>
 							</div>
 
 							<div className="relative">
@@ -695,10 +746,10 @@ export default function ProjectDetailView() {
 											setSelectedPageId(key);
 											localStorage.setItem(`hm_project_${projectId}_page`, key);
 										}}
-										className={`group flex flex-col px-3 py-2.5 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-[#26272B] border border-[#383A40]' : 'hover:bg-[#26272B]/50 border border-transparent'
+										className={`group flex items-center px-3 py-2.5 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-[#26272B] border border-[#383A40]' : 'hover:bg-[#26272B]/50 border border-transparent'
 											}`}
 									>
-										<div className="flex items-start gap-2.5 mb-1">
+										<div className="flex items-start gap-2.5 flex-1 min-w-0">
 											<FileText className={`w-4 h-4 shrink-0 mt-0.5 ${isActive ? 'text-[#EEEEEE]' : 'text-[#8A8F98]'}`} />
 											<div className="min-w-0 flex-1">
 												<div className={`text-[13px] font-medium truncate ${isActive ? 'text-[#EEEEEE]' : 'text-[#A0A5B0] group-hover:text-[#EEEEEE]'}`}>
@@ -709,17 +760,25 @@ export default function ProjectDetailView() {
 														{preview}
 													</div>
 												)}
+												{/* Tags Container */}
+												{page.tags && page.tags.length > 0 && (
+													<div className="flex flex-wrap gap-1.5 mt-1">
+														{page.tags.map(tag => (
+															<span key={tag} className="px-1.5 py-0.5 text-[10px] font-medium text-[#8A8F98] bg-[#0E0F11] border border-[#27282B] rounded-[4px]">
+																{tag}
+															</span>
+														))}
+													</div>
+												)}
 											</div>
 										</div>
-										{/* Tags Container */}
-										{page.tags && page.tags.length > 0 && (
-											<div className="flex flex-wrap gap-1.5 mt-1 pl-[26px]">
-												{page.tags.map(tag => (
-													<span key={tag} className="px-1.5 py-0.5 text-[10px] font-medium text-[#8A8F98] bg-[#0E0F11] border border-[#27282B] rounded-[4px]">
-														{tag}
-													</span>
-												))}
-											</div>
+										{Object.keys(canvasContent).length > 1 && (
+											<button
+												onClick={(e) => deletePage(e, key)}
+												className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#383A40] text-[#5A5D66] hover:text-red-400 transition-all"
+											>
+												<Trash className="w-3.5 h-3.5" />
+											</button>
 										)}
 									</div>
 								);

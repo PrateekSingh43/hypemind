@@ -22,6 +22,7 @@ import {
   Loader2,
   Highlighter,
   Search,
+  ChevronRight,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/core";
@@ -98,7 +99,7 @@ function QuickNoteContent() {
 
         const [notesRes, projectsRes] = await Promise.all([
           api.get<{ data: QuickNoteRecord[] }>(`/workspaces/${workspaceId}/item/quick-note`),
-          api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project`)
+          api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project?all=true`)
         ]);
 
         setProjects(projectsRes.data || []);
@@ -352,6 +353,19 @@ function QuickNoteContent() {
           </div>
         </div>
       )}
+
+      {/* Top Breadcrumb Bar */}
+      <div className="h-14 flex items-center px-6 shrink-0 border-b border-[#27282B] bg-[#0E0F11]">
+        <div className="flex items-center gap-2 text-[12px] text-[#5A5D66] font-medium">
+          <span className="hover:text-[#8A8F98] cursor-pointer transition-colors">Quick Notes</span>
+          {title && (
+            <>
+              <ChevronRight className="w-3 h-3" />
+              <span className="text-[#8A8F98] truncate max-w-[200px]">{title}</span>
+            </>
+          )}
+        </div>
+      </div>
 
       <div className="flex flex-col flex-1 min-h-0 max-w-[720px] w-full mx-auto px-6 md:px-0">
         <QuickNoteEditor

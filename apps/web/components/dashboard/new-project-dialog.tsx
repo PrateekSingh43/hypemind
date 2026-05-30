@@ -14,6 +14,12 @@ import { Button } from "@repo/ui/components/button";
 import { Textarea } from "@repo/ui/components/textarea";
 import { X, Plus } from "lucide-react";
 
+export type ProjectMetadata = {
+  title: string;
+  description?: string;
+  tags?: string[];
+};
+
 type NewProjectDialogProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -22,12 +28,14 @@ type NewProjectDialogProps = {
     description: string;
     tags: string[];
   }) => void;
+  initialData?: ProjectMetadata | null;
 };
 
 export function NewProjectDialog({
   isOpen,
   onClose,
   onSubmit,
+  initialData,
 }: NewProjectDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -43,12 +51,18 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (isOpen) {
-      setTitle("");
-      setDescription("");
-      setTags([]);
+      if (initialData) {
+        setTitle(initialData.title);
+        setDescription(initialData.description || "");
+        setTags(initialData.tags || []);
+      } else {
+        setTitle("");
+        setDescription("");
+        setTags([]);
+      }
       setTagInput("");
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   const handleAddTag = (tagToAdd: string) => {
     const trimmed = tagToAdd.trim().toLowerCase();
@@ -85,9 +99,13 @@ export function NewProjectDialog({
       <DialogContent className="max-w-md bg-surface border-border">
         <form onSubmit={handleSubmit}>
           <DialogHeader className="mb-4">
-            <DialogTitle className="text-foreground">Create New Project</DialogTitle>
+            <DialogTitle className="text-foreground">
+              {initialData ? "Edit Project" : "Create New Project"}
+            </DialogTitle>
             <DialogDescription>
-              Add a title, description, and tags for your new project.
+              {initialData
+                ? "Edit the title, description, and tags for your project."
+                : "Add a title, description, and tags for your new project."}
             </DialogDescription>
           </DialogHeader>
 
@@ -199,7 +217,7 @@ export function NewProjectDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!title.trim()}>
-              Create Project
+              {initialData ? "Save Changes" : "Create Project"}
             </Button>
           </DialogFooter>
         </form>

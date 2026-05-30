@@ -12,6 +12,7 @@ import {
   Search,
   X,
   FileText,
+  FilePenLine,
   BookOpen,
   CheckSquare,
   Link2,
@@ -54,10 +55,10 @@ type SearchModalProps = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const ITEM_TYPE_MAP: Record<string, { icon: typeof FileText; label: string }> =
+const ITEM_TYPE_MAP: Record<string, { icon: any; label: string }> =
   {
-    QUICK_NOTE: { icon: FileText, label: "Quick Note" },
-    PAGE: { icon: BookOpen, label: "Page" },
+    QUICK_NOTE: { icon: FilePenLine, label: "Quick Note" },
+    PAGE: { icon: FileText, label: "Page" },
     JOURNAL: { icon: BookOpen, label: "Journal" },
     TASK: { icon: CheckSquare, label: "Task" },
     LINK: { icon: Link2, label: "Link" },

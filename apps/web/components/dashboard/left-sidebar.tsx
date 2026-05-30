@@ -16,18 +16,25 @@ import {
   Trash,
   Check,
   FileText,
+  FilePenLine,
   Loader2,
   Folder,
   Pin,
   PenLine,
+  MoreHorizontal,
+  Copy,
+  CopyPlus,
+  Trash2,
+  Link as LinkIcon,
   type LucideIcon,
 } from "lucide-react";
 
 import { SearchModal } from "./search-modal";
 import { NewProjectDialog } from "./new-project-dialog";
 import { AreaProjectAssignmentPopover } from "./area-project-assignment-popover";
+import { ProjectAreaAssignmentPopover } from "./project-area-assignment-popover";
+import { PinnedAssignmentPopover } from "./pinned-assignment-popover";
 import { NewAreaDialog } from "./new-area-dialog";
-
 import { Navigator } from "../../lib/navigator";
 import {
   api,
@@ -41,6 +48,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 
@@ -59,6 +67,7 @@ const SidebarItem = ({
   onClick,
   isCollapsed,
   badge,
+  rightElement,
 }: {
   icon?: LucideIcon;
   label: string;
@@ -71,6 +80,7 @@ const SidebarItem = ({
   onClick?: (e: React.MouseEvent) => void;
   isCollapsed?: boolean;
   badge?: number;
+  rightElement?: React.ReactNode;
 }) => {
   const paddingLeft = isCollapsed ? "0px" : `${8 + level * 16}px`;
   const hasSplitTargets = href && isExpandable && !isCollapsed;
@@ -126,13 +136,24 @@ const SidebarItem = ({
       )}
       {!isCollapsed && (
         <>
-          <span className="text-[13px] font-medium truncate leading-5">
+          <span className="text-[13px] font-medium truncate leading-5 flex-1">
             {label}
           </span>
           {badge !== undefined && badge > 0 && (
             <span className="ml-auto text-[11px] font-normal text-muted-foreground shrink-0">
               {badge}
             </span>
+          )}
+          {rightElement && (
+            <div
+              className="ml-auto flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-75"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              {rightElement}
+            </div>
           )}
         </>
       )}
@@ -214,6 +235,7 @@ export function LeftSidebar({
   });
   const [areas, setAreas] = useState<AreaTreeItem[]>([]);
   const [projects, setProjects] = useState<SidebarTreeItem[]>([]);
+  const [pinnedItems, setPinnedItems] = useState<{ areas: any[], projects: any[], items: any[] }>({ areas: [], projects: [], items: [] });
   const [areasLoading, setAreasLoading] = useState(true);
   const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
   const [quickNotes, setQuickNotes] = useState<QuickNoteSummary[]>([]);
@@ -222,7 +244,15 @@ export function LeftSidebar({
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
   const [isNewAreaDialogOpen, setIsNewAreaDialogOpen] = useState(false);
   const [isAreaProjectPopoverOpen, setIsAreaProjectPopoverOpen] = useState(false);
+  const [isProjectAreaPopoverOpen, setIsProjectAreaPopoverOpen] = useState(false);
+  const [activeProjectIdForArea, setActiveProjectIdForArea] = useState<string | undefined>();
+  const [projectToEdit, setProjectToEdit] = useState<{ id: string; title: string; description?: string; tags?: string[] } | null>(null);
+  const [areaToEdit, setAreaToEdit] = useState<{ id: string; title: string; description?: string; tags?: string[] } | null>(null);
+  const [isPinnedPopoverOpen, setIsPinnedPopoverOpen] = useState(false);
   const [activeAreaIdForProject, setActiveAreaIdForProject] = useState<string | undefined>();
+  const [globalPages, setGlobalPages] = useState<{ id: string; title: string }[]>([]);
+  const [selectedGlobalPageId, setSelectedGlobalPageId] = useState<string | null>(null);
+  const [isGlobalPagesListCollapsed, setIsGlobalPagesListCollapsed] = useState(true);
 
   const currentWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
@@ -253,6 +283,17 @@ export function LeftSidebar({
       setProjects(res.data.map((p) => ({ id: p.id, title: p.title })));
     } catch (err) {
       console.error("Failed to fetch projects for sidebar:", err);
+    }
+  }, [activeWorkspaceId]);
+
+  const fetchPinnedItems = useCallback(async () => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+      const res = await api.get<{ data: { areas: any[], projects: any[], items: any[] } }>(`/workspaces/${workspaceId}/pinned`);
+      setPinnedItems(res.data || { areas: [], projects: [], items: [] });
+    } catch (err) {
+      console.error("Failed to fetch pinned items:", err);
     }
   }, [activeWorkspaceId]);
 
@@ -393,7 +434,8 @@ export function LeftSidebar({
     setAreas([]);
     void fetchProjects();
     void fetchAreas();
-  }, [activeWorkspaceId, fetchProjects, fetchAreas]);
+    void fetchPinnedItems();
+  }, [activeWorkspaceId, fetchProjects, fetchAreas, fetchPinnedItems]);
 
   useEffect(() => {
     return subscribeToWorkspaceChange((workspaceId) => {
@@ -402,8 +444,9 @@ export function LeftSidebar({
       setAreas([]);
       void fetchProjects();
       void fetchAreas();
+      void fetchPinnedItems();
     });
-  }, [fetchProjects, fetchAreas]);
+  }, [fetchProjects, fetchAreas, fetchPinnedItems]);
 
   const { setTheme, resolvedTheme } = useTheme();
 
@@ -438,6 +481,82 @@ export function LeftSidebar({
       setIsCreatingQuickNote(false);
     }
   }, [activeWorkspaceId, isCreatingQuickNote, router]);
+
+  const loadGlobalPages = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('hm:global_pages:v1');
+      if (raw) {
+        const data = JSON.parse(raw);
+        setGlobalPages(Object.entries(data).map(([id, page]: any) => ({ id, title: page.title || 'Untitled' })));
+      } else {
+        setGlobalPages([]);
+      }
+    } catch (err) {}
+  }, []);
+
+  useEffect(() => {
+    if (expanded.pages) {
+      loadGlobalPages();
+    }
+    
+    window.addEventListener('hm:global-pages-updated', loadGlobalPages);
+    return () => window.removeEventListener('hm:global-pages-updated', loadGlobalPages);
+  }, [expanded.pages, loadGlobalPages]);
+
+  useEffect(() => {
+    setSelectedGlobalPageId(localStorage.getItem('hm_global_selected_page'));
+    setIsGlobalPagesListCollapsed(localStorage.getItem('hm_global_pages_sidebar_collapsed') !== 'false');
+    
+    const handleGlobalPageSelected = () => {
+      setSelectedGlobalPageId(localStorage.getItem('hm_global_selected_page'));
+      setIsGlobalPagesListCollapsed(localStorage.getItem('hm_global_pages_sidebar_collapsed') !== 'false');
+    };
+    
+    window.addEventListener('storage', handleGlobalPageSelected);
+    window.addEventListener('hm:global-pages-sidebar-toggled', handleGlobalPageSelected);
+    return () => {
+        window.removeEventListener('storage', handleGlobalPageSelected);
+        window.removeEventListener('hm:global-pages-sidebar-toggled', handleGlobalPageSelected);
+    };
+  }, [pathname]);
+
+  const handleCreateGlobalPage = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const STORAGE_KEY = 'hm:global_pages:v1';
+      const raw = localStorage.getItem(STORAGE_KEY);
+      let data: any = {};
+      if (raw) {
+          data = JSON.parse(raw);
+      } else {
+          data['primary'] = {
+              title: 'Welcome to Pages',
+              content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'This is your global pages workspace.' }] }] },
+              tags: []
+          };
+      }
+      
+      const id = Math.random().toString(36).substr(2, 9);
+      const newPage = {
+        title: 'Untitled Page',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        tags: []
+      };
+      
+      data[id] = newPage;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(`hm_global_selected_page`, id);
+      localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
+      window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
+      setSelectedGlobalPageId(id);
+      
+      setExpanded((prev) => ({ ...prev, pages: true }));
+      loadGlobalPages();
+      router.push('/dashboard/pages');
+    } catch (err) {
+      console.error(err);
+    }
+  }, [router, loadGlobalPages]);
 
   useEffect(() => {
     const handleGlobalShortcut = (e: KeyboardEvent) => {
@@ -537,6 +656,27 @@ export function LeftSidebar({
     }
   };
 
+  const handleEditProjectSubmit = async ({ title, description, tags }: { title: string; description: string; tags: string[] }) => {
+    if (!projectToEdit) return;
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+
+      await api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${projectToEdit.id}`, {
+        title,
+        description,
+        tags,
+      });
+
+      await fetchProjects();
+      await fetchAreas();
+      await fetchPinnedItems();
+      setProjectToEdit(null);
+    } catch (err) {
+      console.error("Failed to edit project:", err);
+    }
+  };
+
   const handleAssignProjectToArea = async (projectIds: string[]) => {
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
@@ -560,6 +700,52 @@ export function LeftSidebar({
     }
   };
 
+  const handleAssignAreaToProject = async (areaId: string) => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId || !activeProjectIdForArea) return;
+
+      await api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${activeProjectIdForArea}`, {
+        areaId: areaId,
+      });
+
+      // Refresh data
+      await Promise.all([fetchProjects(), fetchAreas()]);
+      setIsProjectAreaPopoverOpen(false);
+      setOpenAreas((prev) => ({ ...prev, [areaId]: true }));
+      setExpanded((prev) => ({ ...prev, area: true }));
+    } catch (err) {
+      console.error("Failed to assign area to project:", err);
+    }
+  };
+
+  const handlePinItems = async (areaIds: string[], projectIds: string[], pageIds: string[]) => {
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+
+      const promises: Promise<any>[] = [];
+
+      for (const areaId of areaIds) {
+        promises.push(api.patch(`/workspaces/${workspaceId}/area/${areaId}`, { isPinned: true }));
+      }
+      for (const projectId of projectIds) {
+        promises.push(api.patch(`/workspaces/${workspaceId}/project/${projectId}`, { isPinned: true }));
+      }
+      for (const pageId of pageIds) {
+        promises.push(api.patch(`/workspaces/${workspaceId}/item/${pageId}`, { isPinned: true }));
+      }
+
+      await Promise.all(promises);
+
+      await fetchPinnedItems();
+      setIsPinnedPopoverOpen(false);
+      setExpanded((prev) => ({ ...prev, pinned: true }));
+    } catch (err) {
+      console.error("Failed to pin items:", err);
+    }
+  };
+
   const handleNewAreaSubmit = async ({ title, description }: { title: string; description: string }) => {
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
@@ -578,6 +764,29 @@ export function LeftSidebar({
       setExpanded((prev) => ({ ...prev, area: true }));
     } catch (err) {
       console.error("Failed to create area:", err);
+    }
+  };
+
+  const handleEditAreaSubmit = async ({ title, description }: { title: string; description: string }) => {
+    if (!areaToEdit) return;
+    try {
+      const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+      if (!workspaceId) return;
+
+      const res = await api.patch<{ data: any }>(`/workspaces/${workspaceId}/area/${areaToEdit.id}`, {
+        title,
+        description,
+      });
+
+      const updatedArea = res.data;
+      setAreas((prev) =>
+        prev.map((a) =>
+          a.id === updatedArea.id ? { ...a, title: updatedArea.title } : a
+        )
+      );
+      setAreaToEdit(null);
+    } catch (err) {
+      console.error("Failed to edit area:", err);
     }
   };
 
@@ -604,6 +813,224 @@ export function LeftSidebar({
 
   const setSelectedWorkspaceRoute = () => {
     router.push("/dashboard");
+  };
+
+  const renderProjectOptions = (projectId: string, isPinned: boolean) => {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <div
+            className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!activeWorkspaceId) return;
+              try {
+                await api.patch(`/workspaces/${activeWorkspaceId}/project/${projectId}`, { isPinned: !isPinned });
+                await fetchProjects();
+                await fetchAreas();
+                await fetchPinnedItems();
+              } catch (err) {}
+            }}
+          >
+            <Pin className="w-4 h-4" />
+            {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveProjectIdForArea(projectId);
+              setIsProjectAreaPopoverOpen(true);
+            }}
+          >
+            <Folder className="w-4 h-4" />
+            Add to area
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-border/50 my-1.5" />
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(`${window.location.origin}/dashboard/project/${projectId}`);
+            }}
+          >
+            <Copy className="w-4 h-4" />
+            Copy link
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                if (!workspaceId) return;
+                await api.post(`/workspaces/${workspaceId}/project/${projectId}/duplicate`);
+                await fetchProjects();
+                await fetchAreas();
+              } catch (err) {
+                console.error("Failed to duplicate project", err);
+              }
+            }}
+          >
+            <CopyPlus className="w-4 h-4" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                const res = await api.get<{ data: any }>(`/workspaces/${workspaceId}/project/${projectId}`);
+                setProjectToEdit(res.data);
+              } catch (err) {
+                const proj = projects.find(p => p.id === projectId) || areas.flatMap(a => a.projects).find(p => p.id === projectId);
+                setProjectToEdit({ id: projectId, title: proj?.title || "Untitled" });
+              }
+            }}
+          >
+            <PenLine className="w-4 h-4" />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                if (!workspaceId) return;
+                await api.patch(`/workspaces/${workspaceId}/project/${projectId}`, { deletedAt: new Date() });
+                await fetchProjects();
+                await fetchAreas();
+              } catch (err) {
+                console.error("Failed to move to trash", err);
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+            Move to trash
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  const renderAreaOptions = (areaId: string, isPinned: boolean) => {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <div
+            className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!activeWorkspaceId) return;
+              try {
+                await api.patch(`/workspaces/${activeWorkspaceId}/area/${areaId}`, { isPinned: !isPinned });
+                await fetchAreas();
+                await fetchPinnedItems();
+              } catch (err) {
+                console.error("Failed to pin area", err);
+              }
+            }}
+          >
+            <Pin className="w-4 h-4" />
+            {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          </DropdownMenuItem>
+          <div className="h-[1px] bg-border my-1" />
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(`${window.location.origin}/dashboard`);
+              // Actually Area doesn't have a dedicated page, but we add copy link for consistency
+            }}
+          >
+            <LinkIcon className="w-4 h-4" />
+            Copy link
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!activeWorkspaceId) return;
+              try {
+                const res = await api.post<{ data: any }>(`/workspaces/${activeWorkspaceId}/area/${areaId}/duplicate`);
+                const newArea = res.data;
+                setAreas((prev) => [
+                  { id: newArea.id, title: newArea.title, projects: [] },
+                  ...prev
+                ]);
+              } catch (err) {
+                console.error("Failed to duplicate area", err);
+              }
+            }}
+          >
+            <CopyPlus className="w-4 h-4" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const area = areas.find(a => a.id === areaId) || pinnedItems.areas.find(a => a.id === areaId);
+              setAreaToEdit({ id: areaId, title: area?.title || "Untitled" });
+            }}
+          >
+            <PenLine className="w-4 h-4" />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                if (!workspaceId) return;
+                await api.patch(`/workspaces/${workspaceId}/area/${areaId}`, { deletedAt: new Date() });
+                await fetchAreas();
+                await fetchProjects();
+                await fetchPinnedItems();
+              } catch (err) {
+                console.error("Failed to move to trash", err);
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+            Move to trash
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
   };
 
   const createWorkspace = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -634,6 +1061,78 @@ export function LeftSidebar({
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const renderQuickNoteOptions = (noteId: string) => {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <div
+            className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(`${window.location.origin}/dashboard/quick-note?id=${noteId}`);
+            }}
+          >
+            <Copy className="w-4 h-4" />
+            Copy link
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                if (!workspaceId) return;
+                const res = await api.post<{ data: QuickNoteSummary }>(`/workspaces/${workspaceId}/item/quick-note/${noteId}/duplicate`);
+                setQuickNotes((prev) => [
+                  res.data,
+                  ...prev,
+                ]);
+              } catch (err) {
+                console.error("Failed to duplicate quick note", err);
+              }
+            }}
+          >
+            <CopyPlus className="w-4 h-4" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                if (!workspaceId) return;
+                await api.patch(`/workspaces/${workspaceId}/item/quick-note/${noteId}`, { deletedAt: new Date() });
+                setQuickNotes((prev) => prev.filter(n => n.id !== noteId));
+                // If we are currently on this note, we could redirect, but let's keep it simple
+              } catch (err) {
+                console.error("Failed to move to trash", err);
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+            Move to trash
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
 
   if (!isMounted) {
     return (
@@ -853,6 +1352,7 @@ export function LeftSidebar({
                     title="Pin item"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setIsPinnedPopoverOpen(true);
                     }}
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -860,8 +1360,46 @@ export function LeftSidebar({
                 </div>
               </div>
               {expanded["pinned"] && (
-                <div className="mt-1 text-[13px] text-muted-foreground px-8 py-1">
-                  No pinned items.
+                <div className="mt-1 space-y-0.5 max-h-[40vh] overflow-y-auto scrollbar-thin">
+                  {pinnedItems.areas.length === 0 && pinnedItems.projects.length === 0 && pinnedItems.items.length === 0 ? (
+                    <div className="text-[13px] text-muted-foreground px-8 py-1">
+                      No pinned items.
+                    </div>
+                  ) : (
+                    <>
+                      {pinnedItems.areas.map(area => (
+                        <SidebarItem
+                          key={area.id}
+                          icon={Folder}
+                          label={area.title}
+                          href={`/dashboard/area/${area.id}`}
+                          active={isRouteActive(pathname, `/dashboard/area/${area.id}`)}
+                          level={1}
+                        />
+                      ))}
+                      {pinnedItems.projects.map(project => (
+                        <SidebarItem
+                          key={project.id}
+                          icon={Folder}
+                          label={project.title}
+                          href={`/dashboard/project/${project.id}`}
+                          active={isRouteActive(pathname, `/dashboard/project/${project.id}`)}
+                          level={1}
+                          rightElement={renderProjectOptions(project.id, true)}
+                        />
+                      ))}
+                      {pinnedItems.items.map(page => (
+                        <SidebarItem
+                          key={page.id}
+                          icon={FileText}
+                          label={page.title || "Untitled"}
+                          href={`/dashboard/page/${page.id}`}
+                          active={isRouteActive(pathname, `/dashboard/page/${page.id}`)}
+                          level={1}
+                        />
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </>
@@ -885,7 +1423,7 @@ export function LeftSidebar({
             >
               <div className="flex items-center gap-0 flex-1 min-w-0">
                 <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                  <PenLine className="w-3.5 h-3.5" />
+                  <FilePenLine className="w-3.5 h-3.5" />
                 </div>
                 <span className="text-[13px] font-medium transition-colors duration-75 leading-5 flex-1 truncate">
                   Quick Notes
@@ -902,7 +1440,7 @@ export function LeftSidebar({
                     <ChevronRight className="w-3.5 h-3.5" />
                   </div>
                 </div>
-                <div className="flex items-center gap-0.5 ml-1 opacity-70 group-hover:opacity-100 transition-opacity duration-75">
+                <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
                   <div className="relative group/tooltip flex items-center">
                     <button
                       type="button"
@@ -933,7 +1471,7 @@ export function LeftSidebar({
             </div>
 
             {expanded["quickNote"] && (
-              <div className="mt-1 space-y-0.5">
+              <div className="mt-1 space-y-0.5 max-h-[40vh] overflow-y-auto scrollbar-thin">
                 {quickNotesLoading && (
                   <div className="px-8 py-1 text-[12px] text-muted-foreground">
                     Loading notes...
@@ -947,7 +1485,7 @@ export function LeftSidebar({
                 {quickNotes.map((note) => (
                   <SidebarItem
                     key={note.id}
-                    icon={FileText}
+                    icon={FilePenLine}
                     label={
                       note.title ||
                       note.contentString?.slice(0, 20) ||
@@ -959,6 +1497,7 @@ export function LeftSidebar({
                       searchParams.get("id") === note.id
                     }
                     level={1}
+                    rightElement={renderQuickNoteOptions(note.id)}
                   />
                 ))}
               </div>
@@ -974,7 +1513,7 @@ export function LeftSidebar({
                 onClick={() => toggle("pages")}
               >
                 <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                  <FileText className="w-3.5 h-3.5" />
+                    <FileText className="w-3.5 h-3.5" />
                 </div>
                 <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
                   Pages
@@ -991,16 +1530,52 @@ export function LeftSidebar({
                 <div
                   className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                   title="New page"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
+                  onClick={handleCreateGlobalPage}
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </div>
               </div>
             </div>
 
-            {expanded["pages"] && <>{/* Empty for now, as requested */}</>}
+            {expanded["pages"] && (
+              <div className="mt-1 flex flex-col max-h-[40vh]">
+                <div className="overflow-y-auto scrollbar-thin flex-1 space-y-0.5 pb-1">
+                  {globalPages.length === 0 && (
+                    <div className="px-8 py-1 text-[12px] text-muted-foreground">
+                      No pages yet.
+                    </div>
+                  )}
+                  {globalPages.map((page) => (
+                    <SidebarItem
+                      key={page.id}
+                      icon={FileText}
+                      label={page.title}
+                      href={`/dashboard/pages`}
+                      active={pathname === "/dashboard/pages" && selectedGlobalPageId === page.id}
+                      level={1}
+                      onClick={() => {
+                          localStorage.setItem('hm_global_selected_page', page.id);
+                          localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
+                          window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
+                          setSelectedGlobalPageId(page.id);
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="shrink-0 mt-0.5">
+                  <SidebarItem
+                    label={isGlobalPagesListCollapsed ? "Show All Pages →" : "Hide All Pages"}
+                    href={`/dashboard/pages`}
+                    level={1}
+                    onClick={() => {
+                        const newState = isGlobalPagesListCollapsed ? 'false' : 'true';
+                        localStorage.setItem('hm_global_pages_sidebar_collapsed', newState);
+                        window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1044,7 +1619,7 @@ export function LeftSidebar({
             </div>
 
             {expanded["projects"] && (
-              <>
+              <div className="mt-1 space-y-0.5 max-h-[40vh] overflow-y-auto scrollbar-thin">
                 {areasLoading && (
                   <div className="px-8 py-2 text-[13px] text-muted-foreground">
                     Loading projects...
@@ -1066,9 +1641,10 @@ export function LeftSidebar({
                         pathname,
                         Navigator.project(project.id),
                       )}
+                      rightElement={renderProjectOptions(project.id, false)}
                     />
                   ))}
-              </>
+              </div>
             )}
 
             {/* Areas Section */}
@@ -1106,7 +1682,7 @@ export function LeftSidebar({
             </div>
 
             {expanded["area"] && (
-              <>
+              <div className="mt-1 space-y-0.5 max-h-[40vh] overflow-y-auto scrollbar-thin">
                 {areasLoading && (
                   <div className="px-8 py-2 text-[13px] text-muted-foreground">
                     Loading areas...
@@ -1136,6 +1712,7 @@ export function LeftSidebar({
                           {area.title}
                         </span>
                         <div className="flex items-center gap-0.5 opacity-0 group-hover/area:opacity-100 transition-opacity duration-75 ml-1">
+                          {renderAreaOptions(area.id, false)}
                           <div
                             className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors"
                             title="Add a project in area"
@@ -1160,13 +1737,14 @@ export function LeftSidebar({
                               level={2}
                               href={Navigator.project(project.id)}
                               active={isRouteActive(pathname, Navigator.project(project.id))}
+                              rightElement={renderProjectOptions(project.id, false)}
                             />
                           ))}
                         </div>
                       )}
                     </div>
                   ))}
-              </>
+              </div>
             )}
           </div>
         )}
@@ -1195,14 +1773,24 @@ export function LeftSidebar({
         onClose={() => setIsSearchOpen(false)}
       />
       <NewProjectDialog
-        isOpen={isNewProjectDialogOpen}
-        onClose={() => setIsNewProjectDialogOpen(false)}
-        onSubmit={(data) => handleNewProjectSubmit({ ...data, areaId: activeAreaIdForProject })}
+        isOpen={isNewProjectDialogOpen || !!projectToEdit}
+        onClose={() => {
+          setIsNewProjectDialogOpen(false);
+          setProjectToEdit(null);
+        }}
+        initialData={projectToEdit}
+        onSubmit={(data) => {
+          if (projectToEdit) {
+            handleEditProjectSubmit(data);
+          } else {
+            handleNewProjectSubmit({ ...data, areaId: activeAreaIdForProject });
+          }
+        }}
       />
       <AreaProjectAssignmentPopover
         isOpen={isAreaProjectPopoverOpen}
         onClose={() => setIsAreaProjectPopoverOpen(false)}
-        projects={[...projects, ...areas.flatMap((a) => a.projects)]}
+        projects={Array.from(new Map([...projects, ...areas.flatMap((a) => a.projects)].map(p => [p.id, p])).values())}
         onAssign={handleAssignProjectToArea}
         onCreateAndAssign={(title, description, tags) => {
           handleNewProjectSubmit({ title, description, tags, areaId: activeAreaIdForProject });
@@ -1210,9 +1798,34 @@ export function LeftSidebar({
         }}
       />
       <NewAreaDialog
-        isOpen={isNewAreaDialogOpen}
-        onClose={() => setIsNewAreaDialogOpen(false)}
-        onSubmit={handleNewAreaSubmit}
+        isOpen={isNewAreaDialogOpen || !!areaToEdit}
+        onClose={() => {
+          setIsNewAreaDialogOpen(false);
+          setAreaToEdit(null);
+        }}
+        initialData={areaToEdit}
+        onSubmit={(data) => {
+          if (areaToEdit) {
+            handleEditAreaSubmit(data);
+          } else {
+            handleNewAreaSubmit(data);
+          }
+        }}
+      />
+      <ProjectAreaAssignmentPopover
+        isOpen={isProjectAreaPopoverOpen}
+        onClose={() => setIsProjectAreaPopoverOpen(false)}
+        areas={areas}
+        onAssign={handleAssignAreaToProject}
+        onCreateNewArea={() => {
+          setIsProjectAreaPopoverOpen(false);
+          setIsNewAreaDialogOpen(true);
+        }}
+      />
+      <PinnedAssignmentPopover
+        isOpen={isPinnedPopoverOpen}
+        onClose={() => setIsPinnedPopoverOpen(false)}
+        onPin={handlePinItems}
       />
     </div>
   );

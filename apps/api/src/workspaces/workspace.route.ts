@@ -5,6 +5,7 @@ import {
   createWorkspaceController,
   getWorkspaceBootstrapController,
   listWorkspacesController,
+  getPinnedItemsController,
 } from "./workspace.controller";
 
 const router: Router = Router();
@@ -16,6 +17,12 @@ router.get(
   authMiddleware,
   workspaceMemberMiddleware,
   getWorkspaceBootstrapController,
+);
+router.get(
+  "/:workspaceId/pinned",
+  authMiddleware,
+  workspaceMemberMiddleware,
+  getPinnedItemsController,
 );
 
 export default router;

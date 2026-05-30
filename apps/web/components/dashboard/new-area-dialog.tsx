@@ -22,12 +22,14 @@ type NewAreaDialogProps = {
     description: string;
     tags: string[];
   }) => void;
+  initialData?: { title: string; description?: string; tags?: string[] } | null;
 };
 
 export function NewAreaDialog({
   isOpen,
   onClose,
   onSubmit,
+  initialData,
 }: NewAreaDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -43,12 +45,18 @@ export function NewAreaDialog({
 
   useEffect(() => {
     if (isOpen) {
-      setTitle("");
-      setDescription("");
-      setTags([]);
+      if (initialData) {
+        setTitle(initialData.title);
+        setDescription(initialData.description || "");
+        setTags(initialData.tags || []);
+      } else {
+        setTitle("");
+        setDescription("");
+        setTags([]);
+      }
       setTagInput("");
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   const handleAddTag = (tagToAdd: string) => {
     const trimmed = tagToAdd.trim().toLowerCase();
@@ -85,9 +93,13 @@ export function NewAreaDialog({
       <DialogContent className="max-w-md bg-surface border-border">
         <form onSubmit={handleSubmit}>
           <DialogHeader className="mb-4">
-            <DialogTitle className="text-foreground">Create New Area</DialogTitle>
+            <DialogTitle className="text-foreground">
+              {initialData ? "Edit Area" : "Create New Area"}
+            </DialogTitle>
             <DialogDescription>
-              Add a title and description for your new area.
+              {initialData
+                ? "Update the details for this area."
+                : "Add a title and description for your new area."}
             </DialogDescription>
           </DialogHeader>
 
@@ -199,7 +211,7 @@ export function NewAreaDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!title.trim()}>
-              Create Area
+              {initialData ? "Save Changes" : "Create Area"}
             </Button>
           </DialogFooter>
         </form>

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createProjectController, getProjectsController, getProjectByIdController, updateProjectController } from "./project.controller";
+import { createProjectController, getProjectsController, getProjectByIdController, updateProjectController, duplicateProjectController } from "./project.controller";
 import { authMiddleware } from "../middlewares/middleware.auth";
 import { workspaceMemberMiddleware } from "../middlewares/middleware.workspaceMember";
 
@@ -9,5 +9,6 @@ router.get("/:workspaceId/project", authMiddleware, workspaceMemberMiddleware, g
 router.get("/:workspaceId/project/:projectId", authMiddleware, workspaceMemberMiddleware, getProjectByIdController);
 router.post("/:workspaceId/project", authMiddleware, workspaceMemberMiddleware, createProjectController);
 router.patch("/:workspaceId/project/:projectId", authMiddleware, workspaceMemberMiddleware, updateProjectController);
+router.post("/:workspaceId/project/:projectId/duplicate", authMiddleware, workspaceMemberMiddleware, duplicateProjectController);
 
 export default router;
