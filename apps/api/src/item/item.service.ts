@@ -6,6 +6,7 @@ export async function getInboxItemsService(workspaceId: string) {
       workspaceId,
       projectId: null,
       status: "ACTIVE",
+      deletedAt: null,
       type: {
         not: "PAGE",
       },
@@ -27,6 +28,7 @@ export async function getInboxItemsService(workspaceId: string) {
     updatedAt: item.updatedAt.toISOString(),
     content: item.contentString,
     tags: item.tags.map((t) => t.tag.name),
+    isPinned: item.isPinned,
   }));
 }
 
@@ -36,6 +38,7 @@ export async function getPagesService(workspaceId: string) {
       workspaceId,
       type: "PAGE",
       status: "ACTIVE",
+      deletedAt: null,
     },
     include: {
       tags: {
@@ -54,13 +57,29 @@ export async function getPagesService(workspaceId: string) {
     updatedAt: item.updatedAt.toISOString(),
     content: item.contentString,
     tags: item.tags.map((t) => t.tag.name),
+    isPinned: item.isPinned,
   }));
+}
+
+export async function createPageService(workspaceId: string, userId: string, payload: { title?: string; contentJson?: any; contentString?: string; projectId?: string }) {
+  const item = await prisma.item.create({
+    data: {
+      workspaceId,
+      projectId: payload.projectId || null,
+      createdById: userId,
+      type: "PAGE",
+      title: payload.title || "Untitled Page",
+      contentJson: payload.contentJson || { type: "doc", content: [{ type: "paragraph" }] },
+      contentString: payload.contentString || "",
+    },
+  });
+  return item;
 }
 
 export async function updateItemService(
   itemId: string,
   workspaceId: string,
-  payload: { projectId?: string; isPinned?: boolean; deletedAt?: Date | string }
+  payload: { projectId?: string; isPinned?: boolean; deletedAt?: Date | string | null; title?: string; contentJson?: any; contentString?: string }
 ) {
   const data: Prisma.ItemUpdateInput = {};
   if (payload.projectId !== undefined) {
@@ -72,6 +91,15 @@ export async function updateItemService(
   }
   if (payload.deletedAt !== undefined) {
     data.deletedAt = payload.deletedAt;
+  }
+  if (payload.title !== undefined) {
+    data.title = payload.title;
+  }
+  if (payload.contentJson !== undefined) {
+    data.contentJson = payload.contentJson;
+  }
+  if (payload.contentString !== undefined) {
+    data.contentString = payload.contentString;
   }
 
   const existing = await prisma.item.findFirst({
@@ -178,5 +206,6 @@ export const duplicateItemService = async (
     updatedAt: duplicatedItem.updatedAt.toISOString(),
     content: duplicatedItem.contentString,
     tags: duplicatedItem.tags.map((t) => t.tag.name),
+    isPinned: duplicatedItem.isPinned,
   };
 };

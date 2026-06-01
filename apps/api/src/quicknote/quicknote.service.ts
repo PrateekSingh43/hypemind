@@ -93,6 +93,7 @@ const syncQuickNoteTags = async (
 };
 
 export const updateQuickNoteService = async (
+  userId: string,
   itemId: string,
   workspaceId: string,
   payload: QuickNotePayload,
@@ -150,7 +151,7 @@ export const updateQuickNoteService = async (
   // Record the edit event
   await prisma.interactionEvent.create({
     data: {
-      userId: itemForEvent.createdById || "",
+      userId,
       workspaceId,
       itemId: itemForEvent.id,
       action: "EDIT",

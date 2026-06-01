@@ -7,7 +7,7 @@ import { api, resolveWorkspaceId } from "../../../lib/api";
 type TrashItem = {
   id: string;
   title: string;
-  type: "AREA" | "PROJECT" | "ITEM";
+  type: "AREA" | "PROJECT" | "ITEM" | "GLOBAL_PAGE";
   deletedAt: string;
 };
 
@@ -64,6 +64,8 @@ export default function TrashPage() {
         return <Folder className="w-5 h-5 text-muted-foreground" />;
       case "PROJECT":
         return <FolderGit2 className="w-5 h-5 text-muted-foreground" />;
+      case "GLOBAL_PAGE":
+        return <FileText className="w-5 h-5 text-muted-foreground" />;
       case "ITEM":
       default:
         return <FileText className="w-5 h-5 text-muted-foreground" />;
@@ -74,6 +76,7 @@ export default function TrashPage() {
     switch (type) {
       case "AREA": return "Area";
       case "PROJECT": return "Project";
+      case "GLOBAL_PAGE": return "Global Page";
       case "ITEM": return "Item";
       default: return "Unknown";
     }

@@ -42,6 +42,7 @@ export async function getProjectByIdService(workspaceId: string, projectId: stri
     include: {
       area: true,
       items: {
+        where: { deletedAt: null },
         include: {
           tags: {
             include: {

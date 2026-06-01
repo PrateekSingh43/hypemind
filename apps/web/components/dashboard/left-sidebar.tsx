@@ -26,6 +26,7 @@ import {
   CopyPlus,
   Trash2,
   Link as LinkIcon,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 
@@ -104,7 +105,7 @@ const SidebarItem = ({
   const content = (
     <div
       onClick={handleContainerClick}
-      className={`group flex items-center py-1.25 mx-2 rounded-[5px] cursor-pointer ${
+      className={`group flex items-center py-1.25 mx-2 rounded-[5px] cursor-pointer select-none ${
         active
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75"
@@ -250,7 +251,7 @@ export function LeftSidebar({
   const [areaToEdit, setAreaToEdit] = useState<{ id: string; title: string; description?: string; tags?: string[] } | null>(null);
   const [isPinnedPopoverOpen, setIsPinnedPopoverOpen] = useState(false);
   const [activeAreaIdForProject, setActiveAreaIdForProject] = useState<string | undefined>();
-  const [globalPages, setGlobalPages] = useState<{ id: string; title: string }[]>([]);
+  const [globalPages, setGlobalPages] = useState<{ id: string; title: string; isPinned?: boolean }[]>([]);
   const [selectedGlobalPageId, setSelectedGlobalPageId] = useState<string | null>(null);
   const [isGlobalPagesListCollapsed, setIsGlobalPagesListCollapsed] = useState(true);
 
@@ -448,6 +449,11 @@ export function LeftSidebar({
     });
   }, [fetchProjects, fetchAreas, fetchPinnedItems]);
 
+  useEffect(() => {
+    window.addEventListener('hm:pinned-items-updated', fetchPinnedItems);
+    return () => window.removeEventListener('hm:pinned-items-updated', fetchPinnedItems);
+  }, [fetchPinnedItems]);
+
   const { setTheme, resolvedTheme } = useTheme();
 
   const handleCreateQuickNote = useCallback(async () => {
@@ -482,17 +488,15 @@ export function LeftSidebar({
     }
   }, [activeWorkspaceId, isCreatingQuickNote, router]);
 
-  const loadGlobalPages = useCallback(() => {
+  const loadGlobalPages = useCallback(async () => {
     try {
-      const raw = localStorage.getItem('hm:global_pages:v1');
-      if (raw) {
-        const data = JSON.parse(raw);
-        setGlobalPages(Object.entries(data).map(([id, page]: any) => ({ id, title: page.title || 'Untitled' })));
-      } else {
-        setGlobalPages([]);
-      }
-    } catch (err) {}
-  }, []);
+      if (!activeWorkspaceId) return;
+      const res = await api.get<{ data: any[] }>(`/workspaces/${activeWorkspaceId}/item/page`);
+      setGlobalPages(res.data.map(page => ({ id: page.id, title: page.title || 'Untitled', isPinned: !!page.isPinned })));
+    } catch (err) {
+      console.error("Failed to load global pages", err);
+    }
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     if (expanded.pages) {
@@ -514,49 +518,35 @@ export function LeftSidebar({
     
     window.addEventListener('storage', handleGlobalPageSelected);
     window.addEventListener('hm:global-pages-sidebar-toggled', handleGlobalPageSelected);
+    window.addEventListener('hm:global-page-selected', handleGlobalPageSelected);
     return () => {
         window.removeEventListener('storage', handleGlobalPageSelected);
         window.removeEventListener('hm:global-pages-sidebar-toggled', handleGlobalPageSelected);
+        window.removeEventListener('hm:global-page-selected', handleGlobalPageSelected);
     };
   }, [pathname]);
 
-  const handleCreateGlobalPage = useCallback((e: React.MouseEvent) => {
+  const handleCreateGlobalPage = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const STORAGE_KEY = 'hm:global_pages:v1';
-      const raw = localStorage.getItem(STORAGE_KEY);
-      let data: any = {};
-      if (raw) {
-          data = JSON.parse(raw);
-      } else {
-          data['primary'] = {
-              title: 'Welcome to Pages',
-              content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'This is your global pages workspace.' }] }] },
-              tags: []
-          };
-      }
-      
-      const id = Math.random().toString(36).substr(2, 9);
-      const newPage = {
+      if (!activeWorkspaceId) return;
+      const res = await api.post<{ data: any }>(`/workspaces/${activeWorkspaceId}/item/page`, {
         title: 'Untitled Page',
-        content: { type: 'doc', content: [{ type: 'paragraph' }] },
-        tags: []
-      };
+        contentJson: { type: 'doc', content: [{ type: 'paragraph' }] }
+      });
       
-      data[id] = newPage;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      localStorage.setItem(`hm_global_selected_page`, id);
-      localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
-      window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
-      setSelectedGlobalPageId(id);
+      const newPageId = res.data.id;
+      localStorage.setItem(`hm_global_selected_page`, newPageId);
+      window.dispatchEvent(new Event('hm:global-page-selected'));
+      setSelectedGlobalPageId(newPageId);
       
       setExpanded((prev) => ({ ...prev, pages: true }));
-      loadGlobalPages();
+      await loadGlobalPages();
       router.push('/dashboard/pages');
     } catch (err) {
-      console.error(err);
+      console.error("Failed to create global page:", err);
     }
-  }, [router, loadGlobalPages]);
+  }, [router, loadGlobalPages, activeWorkspaceId]);
 
   useEffect(() => {
     const handleGlobalShortcut = (e: KeyboardEvent) => {
@@ -617,6 +607,7 @@ export function LeftSidebar({
 
   const handleCreateArea = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setActiveProjectIdForArea(undefined);
     setIsNewAreaDialogOpen(true);
   };
 
@@ -757,11 +748,30 @@ export function LeftSidebar({
       });
 
       const newArea = res.data;
-      setAreas((prev) => [
-        { id: newArea.id, title: newArea.title, projects: [] },
-        ...prev.filter((a) => a.id !== newArea.id),
-      ]);
+      
+      if (activeProjectIdForArea) {
+        await api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${activeProjectIdForArea}`, {
+          areaId: newArea.id,
+        });
+        await fetchProjects();
+      }
+
+      setAreas((prev) => {
+        const projectsForNewArea = [];
+        if (activeProjectIdForArea) {
+           const p = projects.find(proj => proj.id === activeProjectIdForArea);
+           if (p) projectsForNewArea.push({ id: p.id, title: p.title });
+        }
+        return [
+          { id: newArea.id, title: newArea.title, projects: projectsForNewArea },
+          ...prev.filter((a) => a.id !== newArea.id),
+        ];
+      });
       setExpanded((prev) => ({ ...prev, area: true }));
+      if (activeProjectIdForArea) {
+        setOpenAreas((prev) => ({ ...prev, [newArea.id]: true }));
+        setActiveProjectIdForArea(undefined);
+      }
     } catch (err) {
       console.error("Failed to create area:", err);
     }
@@ -874,6 +884,16 @@ export function LeftSidebar({
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(`/dashboard/project/${projectId}`, '_blank');
+            }}
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open in a new tab
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
@@ -977,6 +997,16 @@ export function LeftSidebar({
           >
             <LinkIcon className="w-4 h-4" />
             Copy link
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(`/dashboard`, '_blank');
+            }}
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open in a new tab
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
@@ -1123,6 +1153,114 @@ export function LeftSidebar({
                 // If we are currently on this note, we could redirect, but let's keep it simple
               } catch (err) {
                 console.error("Failed to move to trash", err);
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+            Move to trash
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  const renderGlobalPageOptions = (pageId: string, isPinned: boolean) => {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <div
+            className="p-0.5 hover:bg-muted-foreground/20 rounded-[3px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="bottom"
+          align="start"
+          sideOffset={-10}
+          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                if (!activeWorkspaceId) return;
+                await api.patch(`/workspaces/${activeWorkspaceId}/item/${pageId}`, { isPinned: !isPinned });
+                loadGlobalPages();
+                window.dispatchEvent(new Event('hm:global-pages-updated'));
+                window.dispatchEvent(new Event('hm:pinned-items-updated'));
+              } catch (err) {
+                console.error("Failed to pin page:", err);
+              }
+            }}
+          >
+            <Pin className="w-4 h-4" />
+            {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-border/50 my-1.5" />
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(`${window.location.origin}/dashboard/pages`);
+            }}
+          >
+            <Copy className="w-4 h-4" />
+            Copy link
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open('/dashboard/pages', '_blank');
+            }}
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open in a new tab
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                if (!activeWorkspaceId) return;
+                await api.post(`/workspaces/${activeWorkspaceId}/item/${pageId}/duplicate`);
+                loadGlobalPages();
+                window.dispatchEvent(new Event('hm:global-pages-updated'));
+              } catch (err) {
+                console.error("Failed to duplicate page:", err);
+              }
+            }}
+          >
+            <CopyPlus className="w-4 h-4" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                if (!activeWorkspaceId) return;
+                await api.patch(`/workspaces/${activeWorkspaceId}/item/${pageId}`, { deletedAt: new Date().toISOString() });
+                
+                if (localStorage.getItem('hm_global_selected_page') === pageId) {
+                  const activeKeys = globalPages.filter(p => p.id !== pageId);
+                  const firstKey = activeKeys[0]?.id;
+                  if (firstKey) {
+                    localStorage.setItem('hm_global_selected_page', firstKey);
+                  }
+                }
+                
+                loadGlobalPages();
+                window.dispatchEvent(new Event('hm:global-pages-updated'));
+              } catch (err) {
+                console.error("Failed to move page to trash:", err);
               }
             }}
           >
@@ -1325,7 +1463,7 @@ export function LeftSidebar({
           {!isCollapsed && (
             <>
               <div
-                className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+                className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75 select-none"
                 style={{ paddingLeft: "8px" }}
               >
                 <div
@@ -1388,16 +1526,60 @@ export function LeftSidebar({
                           rightElement={renderProjectOptions(project.id, true)}
                         />
                       ))}
-                      {pinnedItems.items.map(page => (
-                        <SidebarItem
-                          key={page.id}
-                          icon={FileText}
-                          label={page.title || "Untitled"}
-                          href={`/dashboard/page/${page.id}`}
-                          active={isRouteActive(pathname, `/dashboard/page/${page.id}`)}
-                          level={1}
-                        />
-                      ))}
+                      {pinnedItems.items.map(item => {
+                        let href = "";
+                        let onClick = undefined;
+                        let icon = FileText;
+                        let active = false;
+
+                        if (item.type === "QUICK_NOTE") {
+                          href = `/dashboard/quick-note?id=${item.id}`;
+                          icon = FilePenLine;
+                          active = pathname.includes("/dashboard/quick-note") && searchParams.get("id") === item.id;
+                        } else if (item.projectId) {
+                          href = `/dashboard/project/${item.projectId}`;
+                          if (item.type === "PAGE") {
+                              active = pathname.includes(`/dashboard/project/${item.projectId}`);
+                              onClick = (e: React.MouseEvent) => {
+                                  localStorage.setItem(`hm_project_${item.projectId}_page`, item.id);
+                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_collapsed`, 'true');
+                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_mode`, 'pages');
+                                  window.dispatchEvent(new Event('hm:project-item-selected'));
+                              };
+                          } else {
+                              active = pathname.includes(`/dashboard/project/${item.projectId}`);
+                              onClick = (e: React.MouseEvent) => {
+                                  localStorage.setItem(`hm_project_${item.projectId}_resource`, item.id);
+                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_collapsed`, 'true');
+                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_mode`, 'resources');
+                                  window.dispatchEvent(new Event('hm:project-item-selected'));
+                              };
+                          }
+                        } else {
+                          href = `/dashboard/pages`;
+                          active = pathname === "/dashboard/pages" && selectedGlobalPageId === item.id;
+                          onClick = (e: React.MouseEvent) => {
+                              localStorage.setItem('hm_global_selected_page', item.id);
+                              localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
+                              window.dispatchEvent(new Event('hm:global-page-selected'));
+                              window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
+                              setSelectedGlobalPageId(item.id);
+                          };
+                        }
+
+                        return (
+                          <SidebarItem
+                            key={`pinned-item-${item.id}`}
+                            icon={icon}
+                            label={item.title || "Untitled"}
+                            href={href}
+                            onClick={onClick}
+                            active={active}
+                            level={1}
+                            rightElement={renderGlobalPageOptions(item.id, true)}
+                          />
+                        );
+                      })}
                     </>
                   )}
                 </div>
@@ -1413,7 +1595,7 @@ export function LeftSidebar({
           <div className="space-y-0.5">
             {/* Quick Note Section */}
             <div
-              className={`group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 transition-colors duration-75 ${
+              className={`group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 transition-colors duration-75 select-none ${
                 pathname.startsWith("/dashboard/quick-note")
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1505,7 +1687,7 @@ export function LeftSidebar({
 
             {/* Pages Section */}
             <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75 select-none"
               style={{ paddingLeft: "8px" }}
             >
               <div
@@ -1555,10 +1737,10 @@ export function LeftSidebar({
                       level={1}
                       onClick={() => {
                           localStorage.setItem('hm_global_selected_page', page.id);
-                          localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
-                          window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
+                          window.dispatchEvent(new Event('hm:global-page-selected'));
                           setSelectedGlobalPageId(page.id);
                       }}
+                      rightElement={renderGlobalPageOptions(page.id, !!page.isPinned)}
                     />
                   ))}
                 </div>
@@ -1586,7 +1768,7 @@ export function LeftSidebar({
           <div className="space-y-0.5">
             {/* Projects Section */}
             <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75 select-none"
               style={{ paddingLeft: "8px" }}
             >
               <div
@@ -1649,7 +1831,7 @@ export function LeftSidebar({
 
             {/* Areas Section */}
             <div
-              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75"
+              className="group flex items-center justify-between mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 hover:bg-muted transition-colors duration-75 select-none"
               style={{ paddingLeft: "8px" }}
             >
               <div
@@ -1697,7 +1879,7 @@ export function LeftSidebar({
                   areas.map((area) => (
                     <div key={area.id} className="flex flex-col">
                       <div
-                        className="group/area flex items-center mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75"
+                        className="group/area flex items-center mx-2 rounded-[5px] cursor-pointer py-1.25 pr-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-75 select-none"
                         style={{ paddingLeft: `${8 + 1 * 16}px` }}
                         onClick={() => toggleArea(area.id)}
                       >
@@ -1802,6 +1984,7 @@ export function LeftSidebar({
         onClose={() => {
           setIsNewAreaDialogOpen(false);
           setAreaToEdit(null);
+          setActiveProjectIdForArea(undefined);
         }}
         initialData={areaToEdit}
         onSubmit={(data) => {
@@ -1814,7 +1997,10 @@ export function LeftSidebar({
       />
       <ProjectAreaAssignmentPopover
         isOpen={isProjectAreaPopoverOpen}
-        onClose={() => setIsProjectAreaPopoverOpen(false)}
+        onClose={() => {
+          setIsProjectAreaPopoverOpen(false);
+          setActiveProjectIdForArea(undefined);
+        }}
         areas={areas}
         onAssign={handleAssignAreaToProject}
         onCreateNewArea={() => {

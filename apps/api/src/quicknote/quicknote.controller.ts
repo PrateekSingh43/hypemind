@@ -17,14 +17,20 @@ export const getQuickNotesController = asyncHandler(async (req: Request, res: Re
 });
 
 export const updateQuickNoteController = asyncHandler(async (req: Request, res: Response) => {
+	const authId = req as AuthenticatedRequest;
+	const userId = authId.user?.id;
 	const { workspaceId, itemId } = req.params;
 	const payload = req.body;
+
+	if (!userId) {
+		throw new UnauthorizedError("You are not logged in");
+	}
 
 	if (!workspaceId || !itemId) {
 		throw new BadRequestError("Missing Workspace ID or Item ID");
 	}
 
-	const result = await updateQuickNoteService(itemId, workspaceId, payload);
+	const result = await updateQuickNoteService(userId, itemId, workspaceId, payload);
 
 	res.status(200).json({ msg: "Quick Note Updated", data: result, success: true })
 });
