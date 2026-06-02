@@ -1510,8 +1510,8 @@ export function LeftSidebar({
                           key={area.id}
                           icon={Folder}
                           label={area.title}
-                          href={`/dashboard/area/${area.id}`}
-                          active={isRouteActive(pathname, `/dashboard/area/${area.id}`)}
+                          href={`/dashboard/area/${area.id}?pinned_id=${area.id}`}
+                          active={isRouteActive(pathname, `/dashboard/area/${area.id}`) && searchParams.get('pinned_id') === area.id}
                           level={1}
                         />
                       ))}
@@ -1520,8 +1520,8 @@ export function LeftSidebar({
                           key={project.id}
                           icon={Folder}
                           label={project.title}
-                          href={`/dashboard/project/${project.id}`}
-                          active={isRouteActive(pathname, `/dashboard/project/${project.id}`)}
+                          href={`/dashboard/project/${project.id}?pinned_id=${project.id}`}
+                          active={isRouteActive(pathname, `/dashboard/project/${project.id}`) && searchParams.get('pinned_id') === project.id}
                           level={1}
                           rightElement={renderProjectOptions(project.id, true)}
                         />
@@ -1533,34 +1533,34 @@ export function LeftSidebar({
                         let active = false;
 
                         if (item.type === "QUICK_NOTE") {
-                          href = `/dashboard/quick-note?id=${item.id}`;
+                          href = `/dashboard/quick-note?id=${item.id}&pinned_id=${item.id}`;
                           icon = FilePenLine;
-                          active = pathname.includes("/dashboard/quick-note") && searchParams.get("id") === item.id;
+                          active = pathname.includes("/dashboard/quick-note") && searchParams.get("id") === item.id && searchParams.get("pinned_id") === item.id;
                         } else if (item.projectId) {
-                          href = `/dashboard/project/${item.projectId}`;
+                          href = `/dashboard/project/${item.projectId}?pinned_id=${item.id}`;
                           if (item.type === "PAGE") {
-                              active = pathname.includes(`/dashboard/project/${item.projectId}`);
+                              active = pathname.includes(`/dashboard/project/${item.projectId}`) && searchParams.get('pinned_id') === item.id;
                               onClick = (e: React.MouseEvent) => {
                                   localStorage.setItem(`hm_project_${item.projectId}_page`, item.id);
-                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_collapsed`, 'true');
                                   localStorage.setItem(`hm_project_${item.projectId}_sidebar_mode`, 'pages');
+                                  window.dispatchEvent(new Event('hm:force-sidebar-collapse'));
                                   window.dispatchEvent(new Event('hm:project-item-selected'));
                               };
                           } else {
-                              active = pathname.includes(`/dashboard/project/${item.projectId}`);
+                              active = pathname.includes(`/dashboard/project/${item.projectId}`) && searchParams.get('pinned_id') === item.id;
                               onClick = (e: React.MouseEvent) => {
                                   localStorage.setItem(`hm_project_${item.projectId}_resource`, item.id);
-                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_collapsed`, 'true');
                                   localStorage.setItem(`hm_project_${item.projectId}_sidebar_mode`, 'resources');
+                                  window.dispatchEvent(new Event('hm:force-sidebar-collapse'));
                                   window.dispatchEvent(new Event('hm:project-item-selected'));
                               };
                           }
                         } else {
-                          href = `/dashboard/pages`;
-                          active = pathname === "/dashboard/pages" && selectedGlobalPageId === item.id;
+                          href = `/dashboard/pages?pinned_id=${item.id}`;
+                          active = pathname === "/dashboard/pages" && searchParams.get('pinned_id') === item.id;
                           onClick = (e: React.MouseEvent) => {
                               localStorage.setItem('hm_global_selected_page', item.id);
-                              localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
+                              window.dispatchEvent(new Event('hm:force-sidebar-collapse'));
                               window.dispatchEvent(new Event('hm:global-page-selected'));
                               window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
                               setSelectedGlobalPageId(item.id);
@@ -1676,7 +1676,8 @@ export function LeftSidebar({
                     href={`/dashboard/quick-note?id=${note.id}`}
                     active={
                       pathname.includes("/dashboard/quick-note") &&
-                      searchParams.get("id") === note.id
+                      searchParams.get("id") === note.id &&
+                      !searchParams.get("pinned_id")
                     }
                     level={1}
                     rightElement={renderQuickNoteOptions(note.id)}
@@ -1733,7 +1734,7 @@ export function LeftSidebar({
                       icon={FileText}
                       label={page.title}
                       href={`/dashboard/pages`}
-                      active={pathname === "/dashboard/pages" && selectedGlobalPageId === page.id}
+                      active={pathname === "/dashboard/pages" && selectedGlobalPageId === page.id && !searchParams.get('pinned_id')}
                       level={1}
                       onClick={() => {
                           localStorage.setItem('hm_global_selected_page', page.id);
@@ -1822,7 +1823,7 @@ export function LeftSidebar({
                       active={isRouteActive(
                         pathname,
                         Navigator.project(project.id),
-                      )}
+                      ) && !searchParams.get('pinned_id')}
                       rightElement={renderProjectOptions(project.id, false)}
                     />
                   ))}
@@ -1918,7 +1919,7 @@ export function LeftSidebar({
                               label={project.title}
                               level={2}
                               href={Navigator.project(project.id)}
-                              active={isRouteActive(pathname, Navigator.project(project.id))}
+                              active={isRouteActive(pathname, Navigator.project(project.id)) && !searchParams.get('pinned_id')}
                               rightElement={renderProjectOptions(project.id, false)}
                             />
                           ))}

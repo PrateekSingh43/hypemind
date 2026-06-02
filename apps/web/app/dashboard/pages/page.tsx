@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { ProjectAssignmentPopover, type ProjectItem } from '../../../components/dashboard/project-assignment-popover';
 import { formatTimeAgo } from '../../../lib/format-time';
+import { useSearchParams } from 'next/navigation';
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -45,6 +46,9 @@ type CanvasContent = {
 type GlobalPagesData = Record<string, CanvasContent>;
 
 export default function PagesPage() {
+	const searchParams = useSearchParams();
+	const pinnedId = searchParams.get('pinned_id');
+
 	const [pagesData, setPagesData] = useState<GlobalPagesData | null>(null);
 	const [selectedPageId, setSelectedPageId] = useState<string>('primary');
 	const [listCollapsed, setListCollapsed] = useState(false);
@@ -64,6 +68,25 @@ export default function PagesPage() {
 		setToast({ visible: true, message, projectName, projectId });
 		setTimeout(() => setToast(null), 6000);
 	};
+
+	useEffect(() => {
+		if (pinnedId) {
+			setListCollapsed(true);
+		} else {
+			const collapsedState = localStorage.getItem('hm_global_pages_sidebar_hidden');
+			if (collapsedState === 'false') {
+				setListCollapsed(false);
+			} else {
+				setListCollapsed(true);
+			}
+		}
+	}, [pinnedId]);
+
+	useEffect(() => {
+		const handleForceCollapse = () => setListCollapsed(true);
+		window.addEventListener('hm:force-sidebar-collapse', handleForceCollapse);
+		return () => window.removeEventListener('hm:force-sidebar-collapse', handleForceCollapse);
+	}, []);
 
 	// Load from API on mount
 	useEffect(() => {
@@ -103,13 +126,6 @@ export default function PagesPage() {
 					if (firstActive) {
 						setSelectedPageId(firstActive.id);
 					}
-				}
-
-				const collapsedState = localStorage.getItem('hm_global_pages_sidebar_collapsed');
-				if (collapsedState === 'false') {
-					setListCollapsed(false);
-				} else {
-					setListCollapsed(true);
 				}
 			} catch (err) {
 				console.error("Failed to load pages:", err);
@@ -294,7 +310,7 @@ export default function PagesPage() {
 						<button
 							onClick={() => {
 							    setListCollapsed(true);
-							    localStorage.setItem('hm_global_pages_sidebar_collapsed', 'true');
+							    localStorage.setItem('hm_global_pages_sidebar_hidden', 'true');
 							}}
 							className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
 							title="Collapse panel"
@@ -504,7 +520,7 @@ export default function PagesPage() {
 							<button
 								onClick={() => {
 								    setListCollapsed(false);
-								    localStorage.setItem('hm_global_pages_sidebar_collapsed', 'false');
+								    localStorage.setItem('hm_global_pages_sidebar_hidden', 'false');
 								}}
 								className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
 								title="Expand panel"

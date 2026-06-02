@@ -42,7 +42,7 @@ import {
 	DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 import { formatTimeAgo } from '../../../../lib/format-time';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ItemContentView } from '../../../../components/dashboard/item-content-view';
 import { QuickNoteEditor, EMPTY_DOC } from '../../../../components/dashboard/quick-note-editor';
 import { NotionEditor } from '../../../../components/editor/notion-editor';
@@ -98,6 +98,8 @@ const getIcon = (type: string) => {
 export default function ProjectDetailView() {
 	const { id } = useParams<{ id: string }>();
 	const projectId = id;
+	const searchParams = useSearchParams();
+	const pinnedId = searchParams.get('pinned_id');
 
 	const [meta, setMeta] = useState({ name: `Project ${projectId}`, area: "Loading..." });
 
@@ -126,6 +128,25 @@ export default function ProjectDetailView() {
 
 	const [toast, setToast] = useState<{ visible: boolean; message: string; pageName?: string; pageId?: string; projectName?: string; projectId?: string; } | null>(null);
 	const editorContainerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (pinnedId) {
+			setListCollapsed(true);
+		} else {
+			const sidebarCollapsed = localStorage.getItem(`hm_project_${projectId}_sidebar_hidden`);
+			if (sidebarCollapsed) {
+				setListCollapsed(sidebarCollapsed === 'true');
+			} else {
+				setListCollapsed(false);
+			}
+		}
+	}, [pinnedId, projectId]);
+
+	useEffect(() => {
+		const handleForceCollapse = () => setListCollapsed(true);
+		window.addEventListener('hm:force-sidebar-collapse', handleForceCollapse);
+		return () => window.removeEventListener('hm:force-sidebar-collapse', handleForceCollapse);
+	}, []);
 
 	// Load from backend on mount
 	useEffect(() => {
@@ -226,9 +247,6 @@ export default function ProjectDetailView() {
 			
 			const savedPage = localStorage.getItem(`hm_project_${projectId}_page`);
 			if (savedPage) setSelectedPageId(savedPage);
-
-			const sidebarCollapsed = localStorage.getItem(`hm_project_${projectId}_sidebar_collapsed`);
-			if (sidebarCollapsed) setListCollapsed(sidebarCollapsed === 'true');
 			
 			const mode = localStorage.getItem(`hm_project_${projectId}_sidebar_mode`);
 			if (mode === 'pages' || mode === 'resources') setSidebarMode(mode);
@@ -594,7 +612,10 @@ export default function ProjectDetailView() {
 				<div className="flex items-center justify-between px-4 py-3 shrink-0">
 					<span className="text-[13px] font-semibold text-[#EEEEEE]">Project Items</span>
 					<button
-						onClick={() => setListCollapsed(true)}
+						onClick={() => {
+                            setListCollapsed(true);
+                            localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'true');
+                        }}
 						className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
 						title="Collapse panel"
 					>
@@ -1130,7 +1151,10 @@ export default function ProjectDetailView() {
 							{/* Expand button when list is collapsed */}
 							{listCollapsed && (
 								<button
-									onClick={() => setListCollapsed(false)}
+									onClick={() => {
+                                        setListCollapsed(false);
+                                        localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'false');
+                                    }}
 									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
 									title="Expand panel"
 								>
