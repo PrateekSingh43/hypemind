@@ -429,14 +429,14 @@ export const api = {
   },
   post: async <T>(
     endpoint: string,
-    data: unknown,
+    data?: unknown,
     init?: ApiRequestInit,
   ): Promise<T> => {
     return request<T>("POST", endpoint, data, init);
   },
   patch: async <T>(
     endpoint: string,
-    data: unknown,
+    data?: unknown,
     init?: ApiRequestInit,
   ): Promise<T> => {
     return request<T>("PATCH", endpoint, data, init);

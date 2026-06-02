@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
 	Layout,
 	FileText,
+	FilePenLine,
 	Link as LinkIcon,
 	Book,
 	ChevronRight,
@@ -23,13 +24,30 @@ import {
 	MoreVertical,
 	ExternalLink,
 	Info,
-	CheckCircle
+	CheckCircle,
+	Trash,
+	MoreHorizontal,
+	Pin,
+	Copy,
+	CopyPlus,
+	PenLine,
+	Trash2,
+	FolderGit2
 } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@repo/ui/components/dropdown-menu";
+import { formatTimeAgo } from '../../../../lib/format-time';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ItemContentView } from '../../../../components/dashboard/item-content-view';
 import { QuickNoteEditor, EMPTY_DOC } from '../../../../components/dashboard/quick-note-editor';
 import { NotionEditor } from '../../../../components/editor/notion-editor';
 import { PageAssignmentPopover } from '../../../../components/dashboard/page-assignment-popover';
+import { ProjectAssignmentPopover, type ProjectItem as AssignmentProjectItem } from '../../../../components/dashboard/project-assignment-popover';
 import { api, resolveWorkspaceId } from '../../../../lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -42,12 +60,17 @@ type ProjectItem = {
 	time: string;
 	tags: string[];
 	status: 'USED' | 'UNUSED';
+	isPinned?: boolean;
 };
 
 type CanvasContent = {
+	id: string;
 	title: string;
 	content: any;
 	tags?: string[];
+	deletedAt?: string;
+	updatedAt?: string;
+	isPinned?: boolean;
 };
 
 type ProjectData = {
@@ -63,105 +86,20 @@ const FILTERS = ['All Types', 'Notes', 'Links', 'Videos', 'Docs'];
 const getIcon = (type: string) => {
 	switch (type) {
 		case 'doc': return FileIcon;
-		case 'note': return FileText;
+		case 'note': return FilePenLine;
+		case 'quick_note': return FilePenLine;
 		case 'link': return LinkIcon;
 		case 'video': return Video;
 		default: return FileText;
 	}
 };
 
-// ── localStorage helpers ───────────────────────────────────────────────────────
-function getStorageKey(projectId: string) {
-	return `hm:project:${projectId}:v1`;
-}
-
-function loadProjectData(projectId: string): ProjectData | null {
-	try {
-		const raw = localStorage.getItem(getStorageKey(projectId));
-		if (raw) return JSON.parse(raw) as ProjectData;
-	} catch { /* ignore */ }
-	return null;
-}
-
-function saveProjectData(projectId: string, data: ProjectData) {
-	try {
-		localStorage.setItem(getStorageKey(projectId), JSON.stringify(data));
-	} catch { /* ignore */ }
-}
-
-// ── Default data for first-time users ──────────────────────────────────────────
-function createDefaultProjectData(projectName: string): ProjectData {
-	const toTipTap = (blocks: string[]) => ({
-		type: 'doc',
-		content: blocks.map(text => ({
-			type: 'paragraph',
-			content: text ? [{ type: 'text', text }] : undefined
-		}))
-	});
-
-	return {
-		items: [
-			{ id: '1', type: 'doc', title: 'Product Direction', preview: 'Render UI Before state sync when...', content: 'Render UI before state sync when minimum required state is present. This prevents the blocking spinner on iOS startup.\n\nWe need to handle 404s gracefully without showing red banners on the frontend. Ensure the fetch wrapper catches and maps to empty states.', time: '1d ago', tags: ['UI', 'Performance'], status: 'USED' },
-			{ id: '2', type: 'link', title: 'API edge case', preview: 'Need to handle 404s gracefully', content: 'Need to handle 404s gracefully without showing red banners on the frontend. Ensure the fetch wrapper catches and maps to empty states.', time: '1h ago', tags: ['backend'], status: 'UNUSED' },
-			{ id: '3', type: 'video', title: 'Design token audit', preview: 'review all colour token across the...', content: 'The concept of the video is to review all colour tokens across the design system.', time: '4h ago', tags: ['design', 'UI'], status: 'USED' },
-		],
-		canvasContent: {
-			primary: {
-				title: "Project Canvas",
-				content: toTipTap([
-					"Render UI before state sync when minimum required state is present. This prevents the blocking spinner on iOS startup.",
-					"We need to handle 404s gracefully without showing red banners on the frontend. Ensure the fetch wrapper catches and maps to empty states.",
-				]),
-				tags: ['UI', 'Performance'],
-			},
-			'1': {
-				title: "Architecture Diagram",
-				content: toTipTap([
-					"System uses a three-layer architecture: API Gateway → Service Layer → Data Layer. Each service communicates via typed event bus.",
-					"Key constraint: all reads must resolve within 50ms at p99. This means aggressive caching at the gateway level.",
-				]),
-				tags: ['backend', 'design'],
-			},
-			'2': {
-				title: "API edge cases",
-				content: toTipTap([
-					"Rate limiting returns 429 with Retry-After header. The client SDK should respect this and queue retries automatically.",
-					"Pagination cursors expire after 15 minutes. If a cursor is stale, the API returns 410 Gone — the client should restart from page 1.",
-				]),
-				tags: ['backend'],
-			},
-			'3': {
-				title: "State sync requirements",
-				content: toTipTap([
-					"Optimistic updates must be reversible. Every mutation should carry a rollback payload that can restore the previous state.",
-					"WebSocket reconnection should replay missed events from the last known sequence number, not re-fetch the entire state.",
-				]),
-				tags: ['Performance'],
-			},
-			'4': {
-				title: "Linear UI Reference",
-				content: toTipTap([
-					"Reference: https://linear.app — Notice how they handle keyboard navigation across lists. Every item is selectable via arrow keys without focus traps.",
-					"Their command palette (Cmd+K) is instant because they index everything client-side. We should consider a similar approach for project search.",
-				]),
-				tags: ['UI', 'design'],
-			},
-			'5': {
-				title: "Meeting notes: Data flow",
-				content: toTipTap([
-					"Decision: We'll use event sourcing for the inbox pipeline. Every capture creates an immutable event, projections build the current state.",
-					"Action item: Prateek to draft the event schema by Friday. Need to support at minimum: ItemCreated, ItemMoved, ItemArchived, ItemTagged.",
-				]),
-				tags: ['backend'],
-			},
-		},
-	};
-}
-
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function ProjectDetailView() {
 	const { id } = useParams<{ id: string }>();
 	const projectId = id;
+	const searchParams = useSearchParams();
+	const pinnedId = searchParams.get('pinned_id');
 
 	const [meta, setMeta] = useState({ name: `Project ${projectId}`, area: "Loading..." });
 
@@ -184,8 +122,31 @@ export default function ProjectDetailView() {
 	const [pagePopoverOpen, setPagePopoverOpen] = useState(false);
 	const [selectedResourceForPageAssign, setSelectedResourceForPageAssign] = useState<string | null>(null);
 
-	const [toast, setToast] = useState<{ visible: boolean; message: string; pageName: string; pageId?: string } | null>(null);
+	const [projectPopoverOpen, setProjectPopoverOpen] = useState(false);
+	const [projects, setProjects] = useState<AssignmentProjectItem[]>([]);
+	const [isRenamingTopBar, setIsRenamingTopBar] = useState(false);
+
+	const [toast, setToast] = useState<{ visible: boolean; message: string; pageName?: string; pageId?: string; projectName?: string; projectId?: string; } | null>(null);
 	const editorContainerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (pinnedId) {
+			setListCollapsed(true);
+		} else {
+			const sidebarCollapsed = localStorage.getItem(`hm_project_${projectId}_sidebar_hidden`);
+			if (sidebarCollapsed) {
+				setListCollapsed(sidebarCollapsed === 'true');
+			} else {
+				setListCollapsed(false);
+			}
+		}
+	}, [pinnedId, projectId]);
+
+	useEffect(() => {
+		const handleForceCollapse = () => setListCollapsed(true);
+		window.addEventListener('hm:force-sidebar-collapse', handleForceCollapse);
+		return () => window.removeEventListener('hm:force-sidebar-collapse', handleForceCollapse);
+	}, []);
 
 	// Load from backend on mount
 	useEffect(() => {
@@ -194,13 +155,21 @@ export default function ProjectDetailView() {
 			const workspaceId = await resolveWorkspaceId();
 			if (!workspaceId) return;
 			try {
-				const res = await api.get<{ data: any }>(`/workspaces/${workspaceId}/project/${projectId}`);
+				const [res, projectsRes] = await Promise.all([
+					api.get<{ data: any }>(`/workspaces/${workspaceId}/project/${projectId}`),
+					api.get<{ data: AssignmentProjectItem[] }>(`/workspaces/${workspaceId}/project?all=true`)
+				]);
 				if (!isMounted) return;
 				const project = res.data;
+				setProjects(projectsRes.data || []);
 				
 				setMeta({ name: project.title, area: project.area?.title || 'Unknown Area' });
 
-				const formattedItems = project.items.map((i: any) => ({
+				const allItems = project.items || [];
+				const pages = allItems.filter((i: any) => i.type === 'PAGE' && !i.deletedAt);
+				const resources = allItems.filter((i: any) => i.type !== 'PAGE' && !i.deletedAt);
+
+				const formattedItems = resources.map((i: any) => ({
 					id: i.id,
 					type: i.type.toLowerCase() === 'quick_note' ? 'note' : i.type.toLowerCase(),
 					title: i.title || '',
@@ -209,17 +178,45 @@ export default function ProjectDetailView() {
 					time: i.updatedAt,
 					tags: i.tags || [],
 					status: i.status === 'UNUSED' ? 'UNUSED' : 'USED',
+					isPinned: !!i.isPinned,
 				}));
 
-				// Load canvas from localStorage or use default
-				let savedCanvas = loadProjectData(projectId)?.canvasContent;
-				if (!savedCanvas) {
-					savedCanvas = createDefaultProjectData(project.title).canvasContent;
+				let loadedCanvas: Record<string, CanvasContent> = {};
+				pages.forEach((p: any) => {
+					loadedCanvas[p.id] = {
+						id: p.id,
+						title: p.title ?? '',
+						content: typeof p.contentJson === 'string' ? JSON.parse(p.contentJson || '{"type":"doc","content":[]}') : (p.contentJson || { type: 'doc', content: [{ type: 'paragraph' }] }),
+						tags: p.tags || [],
+						deletedAt: p.deletedAt,
+						updatedAt: p.updatedAt,
+						isPinned: !!p.isPinned,
+					};
+				});
+
+				// Create primary page if no pages exist
+				if (Object.keys(loadedCanvas).length === 0) {
+					try {
+						const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/item/page`, {
+							title: 'Project Canvas',
+							contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+							projectId: projectId
+						});
+						const newPage = res.data;
+						loadedCanvas[newPage.id] = {
+							id: newPage.id,
+							title: newPage.title,
+							content: newPage.contentJson || { type: 'doc', content: [{ type: 'paragraph' }] },
+							tags: [],
+						};
+					} catch (err) {
+						console.error("Failed to create default page", err);
+					}
 				}
 				
 				setProjectData({
 					items: formattedItems,
-					canvasContent: savedCanvas,
+					canvasContent: loadedCanvas,
 				});
 				
 				if (formattedItems.length > 0) {
@@ -232,24 +229,91 @@ export default function ProjectDetailView() {
 				}
 				
 				const savedPage = localStorage.getItem(`hm_project_${projectId}_page`);
-				if (savedPage && savedCanvas[savedPage]) {
+				if (savedPage && loadedCanvas[savedPage]) {
 					setSelectedPageId(savedPage);
 				} else {
-					setSelectedPageId('primary');
+					const firstPage = Object.values(loadedCanvas)[0];
+					if (firstPage) setSelectedPageId(firstPage.id);
 				}
 			} catch (err) {
 				console.error(err);
 			}
 		};
 		void fetchData();
-		return () => { isMounted = false; };
+
+		const syncState = () => {
+			const savedResource = localStorage.getItem(`hm_project_${projectId}_resource`);
+			if (savedResource) setSelectedResourceId(savedResource);
+			
+			const savedPage = localStorage.getItem(`hm_project_${projectId}_page`);
+			if (savedPage) setSelectedPageId(savedPage);
+			
+			const mode = localStorage.getItem(`hm_project_${projectId}_sidebar_mode`);
+			if (mode === 'pages' || mode === 'resources') setSidebarMode(mode);
+		};
+		syncState();
+
+		window.addEventListener('hm:project-item-selected', syncState);
+
+		return () => {
+			isMounted = false;
+			window.removeEventListener('hm:project-item-selected', syncState);
+		};
 	}, [projectId]);
 
-	// Persist to localStorage on every change
-	const persist = useCallback((data: ProjectData) => {
-		setProjectData(data);
-		saveProjectData(projectId, data);
-	}, [projectId]);
+	const persistResource = useCallback(async (id: string, updates: { title?: string, content?: string, isPinned?: boolean }) => {
+		try {
+			const workspaceId = await resolveWorkspaceId();
+			if (!workspaceId) return;
+			const payload: any = {};
+			if (updates.title !== undefined) payload.title = updates.title;
+			if (updates.content !== undefined) payload.contentString = updates.content;
+			if (updates.isPinned !== undefined) payload.isPinned = updates.isPinned;
+			
+			await api.patch(`/workspaces/${workspaceId}/item/${id}`, payload);
+		} catch (err) {
+			console.error("Failed to update item", err);
+		}
+	}, []);
+
+	const persistCanvas = useCallback(async (id: string, updates: { title?: string, content?: any, isPinned?: boolean }) => {
+		try {
+			const workspaceId = await resolveWorkspaceId();
+			if (!workspaceId) return;
+			const payload: any = {};
+			if (updates.title !== undefined) payload.title = updates.title;
+			if (updates.content !== undefined) payload.contentJson = updates.content;
+			if (updates.isPinned !== undefined) payload.isPinned = updates.isPinned;
+			
+			await api.patch(`/workspaces/${workspaceId}/item/${id}`, payload);
+		} catch (err) {
+			console.error("Failed to update item", err);
+		}
+	}, []);
+
+	const saveCanvasTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const pendingCanvasUpdatesRef = useRef<any>({});
+	const debouncedPersistCanvas = useCallback((id: string, updates: any) => {
+		pendingCanvasUpdatesRef.current = { ...pendingCanvasUpdatesRef.current, ...updates };
+		if (saveCanvasTimeoutRef.current) clearTimeout(saveCanvasTimeoutRef.current);
+		saveCanvasTimeoutRef.current = setTimeout(() => {
+			const payload = { ...pendingCanvasUpdatesRef.current };
+			pendingCanvasUpdatesRef.current = {};
+			void persistCanvas(id, payload);
+		}, 800);
+	}, [persistCanvas]);
+
+	const saveResourceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const pendingResourceUpdatesRef = useRef<any>({});
+	const debouncedPersistResource = useCallback((id: string, updates: any) => {
+		pendingResourceUpdatesRef.current = { ...pendingResourceUpdatesRef.current, ...updates };
+		if (saveResourceTimeoutRef.current) clearTimeout(saveResourceTimeoutRef.current);
+		saveResourceTimeoutRef.current = setTimeout(() => {
+			const payload = { ...pendingResourceUpdatesRef.current };
+			pendingResourceUpdatesRef.current = {};
+			void persistResource(id, payload);
+		}, 800);
+	}, [persistResource]);
 
 	if (!projectData) return null;
 
@@ -261,43 +325,100 @@ export default function ProjectDetailView() {
 
 	const itemCount = items.length + 1; // +1 for primary canvas
 
+
+
 	// ── Handlers ─────────────────────────────────────────────────────────
 	const updateCanvasTitle = (newTitle: string) => {
-		const key = selectedPageId;
-		const updated = {
-			...projectData,
+		setProjectData(prev => prev ? {
+			...prev,
 			canvasContent: {
-				...canvasContent,
-				[key]: {
-					...(canvasContent[key] || { title: '', content: { type: 'doc', content: [] } }),
-					title: newTitle,
-				},
-			},
-		};
-		persist(updated);
+				...prev.canvasContent,
+				[selectedPageId]: { ...prev.canvasContent[selectedPageId], title: newTitle, updatedAt: new Date().toISOString() }
+			}
+		} : prev);
+		debouncedPersistCanvas(selectedPageId, { title: newTitle });
 	};
 
 	const updateCanvasContent = (newContent: any) => {
-		const key = selectedPageId;
-		const existing = canvasContent[key] || { title: '', content: { type: 'doc', content: [] } };
-		const updated = {
-			...projectData,
+		setProjectData(prev => prev ? {
+			...prev,
 			canvasContent: {
-				...canvasContent,
-				[key]: { ...existing, content: newContent },
-			},
-		};
-		persist(updated);
+				...prev.canvasContent,
+				[selectedPageId]: { ...prev.canvasContent[selectedPageId], content: newContent, updatedAt: new Date().toISOString() }
+			}
+		} : prev);
+		debouncedPersistCanvas(selectedPageId, { content: newContent });
+	};
+
+	const createNewPage = async () => {
+		try {
+			const workspaceId = await resolveWorkspaceId();
+			if (!workspaceId) return;
+			const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/item/page`, {
+				title: 'Untitled Page',
+				contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+				projectId: projectId
+			});
+			const newPage = res.data;
+			setProjectData(prev => prev ? {
+				...prev,
+				canvasContent: {
+					...prev.canvasContent,
+					[newPage.id]: {
+						id: newPage.id,
+						title: newPage.title,
+						content: newPage.contentJson || { type: 'doc', content: [{ type: 'paragraph' }] },
+						tags: [],
+						updatedAt: new Date().toISOString()
+					}
+				}
+			} : prev);
+			setSelectedPageId(newPage.id);
+			localStorage.setItem(`hm_project_${projectId}_page`, newPage.id);
+		} catch (err) {
+			console.error("Failed to create page", err);
+		}
+	};
+
+	const deletePage = (e: React.MouseEvent, id: string) => {
+	    e.stopPropagation();
+	    const keys = Object.keys(canvasContent);
+	    if (keys.length <= 1) return; // don't delete the last page
+	    
+	    setProjectData((prev) => {
+			if (!prev) return prev;
+			const newCanvas = { ...prev.canvasContent };
+			delete newCanvas[id];
+			return { ...prev, canvasContent: newCanvas };
+		});
+		persistCanvas(id, { content: { type: 'doc', content: [] } }); // soft delete or similar
+	    
+	    if (selectedPageId === id) {
+			const activeKeys = Object.keys(canvasContent).filter(k => k !== id);
+	        const nextId = activeKeys[0];
+	        setSelectedPageId(nextId);
+	        localStorage.setItem(`hm_project_${projectId}_page`, nextId);
+	    }
 	};
 
 	const updateResourceTitle = (newTitle: string) => {
-		const updatedItems = items.map(i => i.id === selectedResourceId ? { ...i, title: newTitle } : i);
-		persist({ ...projectData, items: updatedItems });
+		if (!selectedResourceId) return;
+		setProjectData((prev) => {
+			if (!prev) return prev;
+			return {
+				...prev,
+				items: prev.items.map(i => i.id === selectedResourceId ? { ...i, title: newTitle } : i)
+			};
+		});
+		persistResource(selectedResourceId, { title: newTitle });
 	};
 
-	const updateResourceContent = (newContent: string) => {
-		const updatedItems = items.map(i => i.id === selectedResourceId ? { ...i, content: newContent } : i);
-		persist({ ...projectData, items: updatedItems });
+	const updateResourceContent = (contentString: string) => {
+		setProjectData(prev => prev ? {
+			...prev,
+			items: prev.items.map(i => i.id === selectedResourceId ? { ...i, content: contentString, time: new Date().toISOString() } : i)
+		} : prev);
+		persistResource(selectedResourceId!, { content: contentString });
 	};
 
 	const openPageAssignment = (resourceId: string) => {
@@ -370,18 +491,23 @@ export default function ProjectDetailView() {
 
 		const updatedItems = items.filter(i => i.id !== selectedResourceForPageAssign);
 
-		const updatedProjectData = {
-			...projectData,
-			items: updatedItems,
-			canvasContent: {
-				...canvasContent,
-				[targetPageId]: {
-					...targetPage,
-					content: updatedContent
+		setProjectData((prev) => {
+			if (!prev) return prev;
+			return {
+				...prev,
+				items: updatedItems,
+				canvasContent: {
+					...prev.canvasContent,
+					[targetPageId]: {
+						...targetPage,
+						content: updatedContent
+					}
 				}
-			}
-		};
-		persist(updatedProjectData);
+			};
+		});
+
+		persistCanvas(targetPageId, { content: updatedContent });
+		// Delete resource logic here...
 
 		const currentIndex = items.findIndex(i => i.id === selectedResourceForPageAssign);
 		const nextItem = updatedItems[currentIndex] || updatedItems[0];
@@ -393,14 +519,56 @@ export default function ProjectDetailView() {
 		setPagePopoverOpen(false);
 		setSelectedResourceForPageAssign(null);
 		
-		setToast({ visible: true, message: 'Added to', pageName: pageTitle, pageId: targetPageId });
+		showToast('Added to', pageTitle, targetPageId);
+	};
+
+	const showToast = (message: string, pageName?: string, pageId?: string, projectName?: string, projectId?: string) => {
+		setToast({ visible: true, message, pageName: pageName || '', pageId, projectName, projectId });
 		setTimeout(() => setToast(null), 6000);
+	};
+
+	const handleAssignToProject = async (assignProjectId: string, projectName: string) => {
+		const targetId = sidebarMode === 'pages' ? selectedPageId : selectedResourceId;
+		if (!targetId) return;
+		try {
+			const workspaceId = await resolveWorkspaceId();
+			if (!workspaceId) return;
+
+			await api.patch(`/workspaces/${workspaceId}/item/${targetId}`, {
+				projectId: assignProjectId
+			});
+
+			setProjectPopoverOpen(false);
+			showToast(`Added to`, undefined, undefined, projectName, assignProjectId);
+		} catch (err) {
+			console.error("Failed to assign to project:", err);
+		}
+	};
+
+	const handleCreateAndAssignProject = async (title: string, desc: string, tags: string[]) => {
+		const targetId = sidebarMode === 'pages' ? selectedPageId : selectedResourceId;
+		if (!targetId || !title.trim()) return;
+		try {
+			const workspaceId = await resolveWorkspaceId();
+			if (!workspaceId) return;
+
+			const res = await api.post<{ data: { id: string, title: string } }>(`/workspaces/${workspaceId}/project`, {
+				title,
+				description: desc,
+				tags
+			});
+			const newProject = res.data;
+
+			await handleAssignToProject(newProject.id, newProject.title);
+		} catch (err) {
+			console.error("Failed to create and assign project:", err);
+		}
 	};
 
 	// ── Display title for editor ─────────────────────────────────────────
 	const editorTitle = selectedPageId === 'primary'
-		? (currentCanvas?.title || 'Project Canvas')
-		: (currentCanvas?.title || 'Untitled');
+		? (currentCanvas?.title ?? '')
+		: (currentCanvas?.title ?? '');
 
 	return (
 		<div className="flex h-full w-full bg-[#0E0F11] text-[#EEEEEE] font-sans antialiased overflow-hidden relative">
@@ -444,7 +612,10 @@ export default function ProjectDetailView() {
 				<div className="flex items-center justify-between px-4 py-3 shrink-0">
 					<span className="text-[13px] font-semibold text-[#EEEEEE]">Project Items</span>
 					<button
-						onClick={() => setListCollapsed(true)}
+						onClick={() => {
+                            setListCollapsed(true);
+                            localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'true');
+                        }}
 						className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
 						title="Collapse panel"
 					>
@@ -632,13 +803,22 @@ export default function ProjectDetailView() {
 						<div className="px-4 py-3 shrink-0 border-b border-[#27282B]/50 flex flex-col gap-3">
 							<div className="flex items-center justify-between">
 								<span className="text-[12px] font-medium text-[#8A8F98]">Pages {Object.keys(canvasContent).length}</span>
-								<button
-									onClick={() => setShowPageFilters(!showPageFilters)}
-									className={`p-1 rounded-md transition-colors border ${showPageFilters ? 'text-primary bg-primary/10 border-primary/20' : 'text-[#8A8F98] bg-transparent border-transparent hover:text-[#EEEEEE] hover:bg-[#26272B]/50'}`}
-									title="Toggle Filters"
-								>
-									<Filter className="w-3.5 h-3.5" />
-								</button>
+								<div className="flex items-center gap-1">
+									<button
+										onClick={createNewPage}
+										className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+										title="New Page"
+									>
+										<Plus className="w-3.5 h-3.5" />
+									</button>
+									<button
+										onClick={() => setShowPageFilters(!showPageFilters)}
+										className={`p-1 rounded-md transition-colors border ${showPageFilters ? 'text-primary bg-primary/10 border-primary/20' : 'text-[#8A8F98] bg-transparent border-transparent hover:text-[#EEEEEE] hover:bg-[#26272B]/50'}`}
+										title="Toggle Filters"
+									>
+										<Filter className="w-3.5 h-3.5" />
+									</button>
+								</div>
 							</div>
 
 							<div className="relative">
@@ -695,10 +875,10 @@ export default function ProjectDetailView() {
 											setSelectedPageId(key);
 											localStorage.setItem(`hm_project_${projectId}_page`, key);
 										}}
-										className={`group flex flex-col px-3 py-2.5 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-[#26272B] border border-[#383A40]' : 'hover:bg-[#26272B]/50 border border-transparent'
+										className={`group flex items-center px-3 py-2.5 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-[#26272B] border border-[#383A40]' : 'hover:bg-[#26272B]/50 border border-transparent'
 											}`}
 									>
-										<div className="flex items-start gap-2.5 mb-1">
+										<div className="flex items-start gap-2.5 flex-1 min-w-0">
 											<FileText className={`w-4 h-4 shrink-0 mt-0.5 ${isActive ? 'text-[#EEEEEE]' : 'text-[#8A8F98]'}`} />
 											<div className="min-w-0 flex-1">
 												<div className={`text-[13px] font-medium truncate ${isActive ? 'text-[#EEEEEE]' : 'text-[#A0A5B0] group-hover:text-[#EEEEEE]'}`}>
@@ -709,17 +889,25 @@ export default function ProjectDetailView() {
 														{preview}
 													</div>
 												)}
+												{/* Tags Container */}
+												{page.tags && page.tags.length > 0 && (
+													<div className="flex flex-wrap gap-1.5 mt-1">
+														{page.tags.map(tag => (
+															<span key={tag} className="px-1.5 py-0.5 text-[10px] font-medium text-[#8A8F98] bg-[#0E0F11] border border-[#27282B] rounded-[4px]">
+																{tag}
+															</span>
+														))}
+													</div>
+												)}
 											</div>
 										</div>
-										{/* Tags Container */}
-										{page.tags && page.tags.length > 0 && (
-											<div className="flex flex-wrap gap-1.5 mt-1 pl-[26px]">
-												{page.tags.map(tag => (
-													<span key={tag} className="px-1.5 py-0.5 text-[10px] font-medium text-[#8A8F98] bg-[#0E0F11] border border-[#27282B] rounded-[4px]">
-														{tag}
-													</span>
-												))}
-											</div>
+										{Object.keys(canvasContent).length > 1 && (
+											<button
+												onClick={(e) => deletePage(e, key)}
+												className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#383A40] text-[#5A5D66] hover:text-red-400 transition-all"
+											>
+												<Trash className="w-3.5 h-3.5" />
+											</button>
 										)}
 									</div>
 								);
@@ -739,18 +927,170 @@ export default function ProjectDetailView() {
 			{sidebarMode === 'resources' ? (
 				<div className="flex-1 flex flex-col bg-[#0E0F11] min-w-0 h-full overflow-hidden">
 					{/* 1. Top Breadcrumb Bar */}
-					<div className="h-14 flex items-center px-6 shrink-0 border-b border-[#27282B] bg-[#0E0F11]">
-						<div className="flex items-center gap-2 text-[12px] text-[#5A5D66] font-medium">
-							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors">{meta.area}</span>
-							<ChevronRight className="w-3 h-3" />
-							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors">Resources</span>
+					<div className="h-14 flex items-center justify-between px-6 shrink-0 border-b border-[#27282B] bg-[#0E0F11]">
+						<div className="flex items-center gap-2 text-[12px] text-[#5A5D66] font-medium min-w-0">
+							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors shrink-0">Projects</span>
+							<ChevronRight className="w-3 h-3 shrink-0" />
+							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors max-w-[150px] truncate">{meta.name}</span>
+							<ChevronRight className="w-3 h-3 shrink-0" />
+							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors shrink-0">Resources</span>
 							{currentItem && (
 								<>
-									<ChevronRight className="w-3 h-3" />
+									<ChevronRight className="w-3 h-3 shrink-0" />
 									<span className="text-[#8A8F98] truncate max-w-[200px]">{currentItem.title || 'Untitled'}</span>
 								</>
 							)}
 						</div>
+						
+						{currentItem && (
+							<div className="flex items-center gap-1.5 shrink-0 ml-4 relative">
+								<span className="text-[12px] text-[#5A5D66] mr-2">Edited {formatTimeAgo(currentItem.time)}</span>
+								
+								<button 
+									onClick={async () => {
+										try {
+											await persistResource(currentItem.id, { isPinned: !currentItem.isPinned });
+											setProjectData(prev => prev ? {
+												...prev,
+												items: prev.items.map(i => i.id === currentItem.id ? { ...i, isPinned: !currentItem.isPinned } : i)
+											} : prev);
+											window.dispatchEvent(new Event('hm:pinned-items-updated'));
+										} catch (e) {
+											console.error("Failed to pin item", e);
+										}
+									}}
+									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+									title={currentItem.isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+								>
+									<Pin className={`w-4 h-4 ${currentItem.isPinned ? "fill-current text-[#EEEEEE]" : ""}`} />
+								</button>
+
+								<button 
+									onClick={() => {
+										navigator.clipboard.writeText(window.location.href);
+										showToast("Link copied to clipboard");
+									}}
+									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+									title="Copy link"
+								>
+									<Copy className="w-4 h-4" />
+								</button>
+								
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
+											<MoreHorizontal className="w-4 h-4" />
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="end"
+										onCloseAutoFocus={(e) => e.preventDefault()}
+										className="w-56 border-[#27282B] bg-[#121315] text-[#EEEEEE] shadow-xl rounded-[8px] p-1.5"
+									>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => {
+												setProjectPopoverOpen(true);
+											}}
+										>
+											<FolderGit2 className="w-4 h-4" />
+											Add to another project
+										</DropdownMenuItem>
+										<DropdownMenuSeparator className="bg-[#27282B] my-1.5" />
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => {
+												navigator.clipboard.writeText(window.location.href);
+												showToast("Link copied to clipboard");
+											}}
+										>
+											<Copy className="w-4 h-4" />
+											Copy link
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => {
+												window.open(window.location.href, '_blank');
+											}}
+										>
+											<ExternalLink className="w-4 h-4" />
+											Open in a new tab
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={async () => {
+												try {
+													const workspaceId = await resolveWorkspaceId();
+													if (!workspaceId) return;
+													await api.post(`/workspaces/${workspaceId}/item/${currentItem.id}/duplicate`);
+													window.location.reload(); // naive reload
+												} catch (err) {
+													console.error("Failed to duplicate:", err);
+												}
+											}}
+										>
+											<CopyPlus className="w-4 h-4" />
+											Duplicate
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => setIsRenamingTopBar(true)}
+										>
+											<PenLine className="w-4 h-4" />
+											Rename
+										</DropdownMenuItem>
+										<DropdownMenuSeparator className="bg-[#27282B] my-1.5" />
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+											onClick={async () => {
+												try {
+													const workspaceId = await resolveWorkspaceId();
+													if (!workspaceId) return;
+													await api.patch(`/workspaces/${workspaceId}/item/${currentItem.id}`, { deletedAt: new Date().toISOString() });
+													setProjectData(prev => prev ? {
+														...prev,
+														items: prev.items.filter(i => i.id !== currentItem.id)
+													} : prev);
+													setSelectedResourceId(null);
+												} catch (err) {
+													console.error("Failed to trash:", err);
+												}
+											}}
+										>
+											<Trash2 className="w-4 h-4" />
+											Move to trash
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+
+								{isRenamingTopBar && (() => {
+									const CurrentIcon = getIcon(currentItem.type);
+									return (
+										<>
+											<div 
+												className="fixed inset-0 z-40" 
+												onClick={(e) => {
+													e.stopPropagation();
+													setIsRenamingTopBar(false);
+												}} 
+											/>
+											<div className="absolute top-[38px] right-0 z-50 bg-[#151618] border border-[#27282B] rounded-[6px] shadow-2xl p-1 flex items-center gap-1.5 w-[360px]">
+												<div className="flex items-center justify-center w-7 h-7 rounded-[4px] border border-[#27282B] bg-[#0E0F11] shrink-0 text-[#8A8F98]">
+													<CurrentIcon className="w-4 h-4" />
+												</div>
+												<input 
+													autoFocus
+													value={currentItem.title || ''}
+													onChange={(e) => updateResourceTitle(e.target.value)}
+													onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setIsRenamingTopBar(false); }}
+													className="flex-1 bg-[#0E0F11] text-[13px] font-medium text-[#EEEEEE] px-2.5 py-1.5 border border-[#27282B] rounded-[4px] outline-none focus:border-[#8A8F98] transition-colors min-w-0 relative z-50"
+												/>
+											</div>
+										</>
+									);
+								})()}
+							</div>
+						)}
 					</div>
 
 					{currentItem ? (
@@ -765,7 +1105,12 @@ export default function ProjectDetailView() {
 									onUpdateTitle={updateResourceTitle}
 									onUpdateTags={(tags) => {
 										const updatedItems = items.map(i => i.id === selectedResourceId ? { ...i, tags } : i);
-										persist({ ...projectData, items: updatedItems });
+										setProjectData((prev) => {
+											if (!prev) return prev;
+											return { ...prev, items: updatedItems };
+										});
+										// Note: tags update isn't fully implemented in persistItem payload in API, but if it is, we'd do it here.
+										// Actually we could do persistItem(selectedResourceId, { tags });
 									}}
 									onUpdateContent={(contentString) => {
 										updateResourceContent(contentString);
@@ -802,23 +1147,189 @@ export default function ProjectDetailView() {
 				<div className="flex-1 flex flex-col bg-[#0E0F11] min-w-0 h-full overflow-hidden">
 					{/* Project Header */}
 					<div className="h-14 border-b border-[#27282B] flex items-center justify-between px-6 shrink-0 bg-[#0E0F11]">
-						<div className="flex items-center gap-3 min-w-0">
+						<div className="flex items-center gap-2 text-[12px] text-[#5A5D66] font-medium min-w-0">
 							{/* Expand button when list is collapsed */}
 							{listCollapsed && (
 								<button
-									onClick={() => setListCollapsed(false)}
+									onClick={() => {
+                                        setListCollapsed(false);
+                                        localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'false');
+                                    }}
 									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
 									title="Expand panel"
 								>
 									<PanelLeft className="w-4 h-4" />
 								</button>
 							)}
-							<span className="text-[13px] text-[#8A8F98] truncate">{meta.area}</span>
-							<ChevronRight className="w-3.5 h-3.5 text-[#5A5D66] shrink-0" />
-							<span className="text-[13px] font-medium text-[#EEEEEE] truncate">{meta.name}</span>
+							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors shrink-0">Projects</span>
+							<ChevronRight className="w-3 h-3 shrink-0" />
+							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors truncate max-w-[150px]">{meta.name}</span>
+							<ChevronRight className="w-3 h-3 shrink-0" />
+							<span className="hover:text-[#8A8F98] cursor-pointer transition-colors shrink-0">Pages</span>
+							{currentCanvas && (
+								<>
+									<ChevronRight className="w-3 h-3 shrink-0" />
+									<span className="text-[#8A8F98] truncate max-w-[200px]">{currentCanvas.title || 'Untitled'}</span>
+								</>
+							)}
 
-							<span className="text-[11px] text-[#5A5D66] shrink-0 hidden md:block">· {itemCount} items</span>
+							<span className="text-[11px] text-[#5A5D66] shrink-0 hidden md:block ml-2">· {itemCount} items</span>
 						</div>
+						
+						{currentCanvas && (
+							<div className="flex items-center gap-1.5 shrink-0 ml-4 relative">
+								<span className="text-[12px] text-[#5A5D66] mr-2">Edited {formatTimeAgo(currentCanvas.updatedAt)}</span>
+								
+								<button 
+									onClick={async () => {
+										try {
+											await persistCanvas(selectedPageId, { isPinned: !currentCanvas.isPinned });
+											setProjectData(prev => prev ? {
+												...prev,
+												canvasContent: {
+													...prev.canvasContent,
+													[selectedPageId]: { ...prev.canvasContent[selectedPageId], isPinned: !currentCanvas.isPinned }
+												}
+											} : prev);
+											window.dispatchEvent(new Event('hm:pinned-items-updated'));
+										} catch (e) {
+											console.error("Failed to pin item", e);
+										}
+									}}
+									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+									title={currentCanvas.isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+								>
+									<Pin className={`w-4 h-4 ${currentCanvas.isPinned ? "fill-current text-[#EEEEEE]" : ""}`} />
+								</button>
+
+								<button 
+									onClick={() => {
+										navigator.clipboard.writeText(window.location.href);
+										showToast("Link copied to clipboard");
+									}}
+									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+									title="Copy link"
+								>
+									<Copy className="w-4 h-4" />
+								</button>
+								
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
+											<MoreHorizontal className="w-4 h-4" />
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="end"
+										onCloseAutoFocus={(e) => e.preventDefault()}
+										className="w-56 border-[#27282B] bg-[#121315] text-[#EEEEEE] shadow-xl rounded-[8px] p-1.5"
+									>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => {
+												setProjectPopoverOpen(true);
+											}}
+										>
+											<FolderGit2 className="w-4 h-4" />
+											Add to another project
+										</DropdownMenuItem>
+										<DropdownMenuSeparator className="bg-[#27282B] my-1.5" />
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => {
+												navigator.clipboard.writeText(window.location.href);
+												showToast("Link copied to clipboard");
+											}}
+										>
+											<Copy className="w-4 h-4" />
+											Copy link
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => {
+												window.open(window.location.href, '_blank');
+											}}
+										>
+											<ExternalLink className="w-4 h-4" />
+											Open in a new tab
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={async () => {
+												try {
+													const workspaceId = await resolveWorkspaceId();
+													if (!workspaceId) return;
+													await api.post(`/workspaces/${workspaceId}/item/${selectedPageId}/duplicate`);
+													window.location.reload(); // naive reload
+												} catch (err) {
+													console.error("Failed to duplicate:", err);
+												}
+											}}
+										>
+											<CopyPlus className="w-4 h-4" />
+											Duplicate
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+											onClick={() => setIsRenamingTopBar(true)}
+										>
+											<PenLine className="w-4 h-4" />
+											Rename
+										</DropdownMenuItem>
+										<DropdownMenuSeparator className="bg-[#27282B] my-1.5" />
+										<DropdownMenuItem
+											className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+											onClick={async () => {
+												try {
+													const workspaceId = await resolveWorkspaceId();
+													if (!workspaceId) return;
+													await api.patch(`/workspaces/${workspaceId}/item/${selectedPageId}`, { deletedAt: new Date().toISOString() });
+													setProjectData(prev => {
+														if (!prev) return prev;
+														const newCanvas = { ...prev.canvasContent };
+														delete newCanvas[selectedPageId];
+														return { ...prev, canvasContent: newCanvas };
+													});
+													
+													const activeKeys = Object.keys(canvasContent).filter(k => k !== selectedPageId);
+													const firstKey = activeKeys[0] || 'primary';
+													setSelectedPageId(firstKey);
+												} catch (err) {
+													console.error("Failed to trash:", err);
+												}
+											}}
+										>
+											<Trash2 className="w-4 h-4" />
+											Move to trash
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+
+								{isRenamingTopBar && (
+									<>
+										<div 
+											className="fixed inset-0 z-40" 
+											onClick={(e) => {
+												e.stopPropagation();
+												setIsRenamingTopBar(false);
+											}} 
+										/>
+										<div className="absolute top-[38px] right-0 z-50 bg-[#151618] border border-[#27282B] rounded-[6px] shadow-2xl p-1 flex items-center gap-1.5 w-[360px]">
+											<div className="flex items-center justify-center w-7 h-7 rounded-[4px] border border-[#27282B] bg-[#0E0F11] shrink-0 text-[#8A8F98]">
+												<FileText className="w-4 h-4" />
+											</div>
+											<input 
+												autoFocus
+												value={currentCanvas.title ?? ''}
+												onChange={(e) => updateCanvasTitle(e.target.value)}
+												onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setIsRenamingTopBar(false); }}
+												className="flex-1 bg-[#0E0F11] text-[13px] font-medium text-[#EEEEEE] px-2.5 py-1.5 border border-[#27282B] rounded-[4px] outline-none focus:border-[#8A8F98] transition-colors min-w-0 relative z-50"
+											/>
+										</div>
+									</>
+								)}
+							</div>
+						)}
 					</div>
 
 					{/* Editor Area */}
@@ -858,6 +1369,14 @@ export default function ProjectDetailView() {
 				}}
 				pages={Object.entries(canvasContent).map(([id, page]) => ({ id, title: page.title || 'Untitled' }))}
 				onAssign={handleAssignToPage}
+			/>
+			
+			<ProjectAssignmentPopover
+				isOpen={projectPopoverOpen}
+				onClose={() => setProjectPopoverOpen(false)}
+				projects={projects}
+				onAssign={handleAssignToProject}
+				onCreateAndAssign={handleCreateAndAssignProject}
 			/>
 
 		</div>

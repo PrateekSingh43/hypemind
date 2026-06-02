@@ -18,12 +18,13 @@ async function generateProjectSlug(tx: Prisma.TransactionClient, baseSlug: strin
   return slug;
 }
 
-export async function getProjectsService(workspaceId: string) {
+export async function getProjectsService(workspaceId: string, all?: boolean) {
   const projects = await prisma.project.findMany({
     where: {
       workspaceId,
       status: "ACTIVE",
-      areaId: null,
+      deletedAt: null,
+      ...(all ? {} : { areaId: null }),
     },
     orderBy: { createdAt: "desc" },
   });
@@ -41,6 +42,7 @@ export async function getProjectByIdService(workspaceId: string, projectId: stri
     include: {
       area: true,
       items: {
+        where: { deletedAt: null },
         include: {
           tags: {
             include: {
@@ -101,7 +103,15 @@ export async function createProjectService({
 export async function updateProjectService(
   workspaceId: string,
   projectId: string,
-  data: { areaId?: string | null }
+  data: { 
+    areaId?: string | null; 
+    isPinned?: boolean; 
+    pinnedAt?: Date | null;
+    title?: string;
+    description?: string | null;
+    tags?: string[];
+    deletedAt?: Date | null;
+  }
 ) {
   const project = await prisma.project.findFirst({
     where: { id: projectId, workspaceId },
@@ -111,5 +121,101 @@ export async function updateProjectService(
   return prisma.project.update({
     where: { id: projectId },
     data,
+  });
+}
+
+export async function duplicateProjectService(
+  userId: string,
+  workspaceId: string,
+  projectId: string
+) {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const originalProject = await tx.project.findFirst({
+      where: { id: projectId, workspaceId },
+      include: { items: true },
+    });
+
+    if (!originalProject) {
+      throw new Error("Project not found");
+    }
+
+    const titleMatch = originalProject.title.match(/^(.*) \((\d+)\)$/);
+    let baseTitle = originalProject.title;
+    if (titleMatch) {
+      baseTitle = titleMatch[1];
+    } else {
+      // Also check if it ends with " (Copy)" and remove it to be clean
+      const copyMatch = originalProject.title.match(/^(.*) \(Copy\)$/);
+      if (copyMatch) {
+        baseTitle = copyMatch[1];
+      }
+    }
+
+    const existingProjects = await tx.project.findMany({
+      where: {
+        workspaceId,
+        title: {
+          startsWith: baseTitle,
+        },
+      },
+      select: { title: true },
+    });
+
+    let maxNum = 0;
+    let hasExactBase = false;
+
+    for (const p of existingProjects) {
+      if (p.title === baseTitle) {
+        hasExactBase = true;
+      } else {
+        const escapedBase = baseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const match = p.title.match(new RegExp(`^${escapedBase} \\((\\d+)\\)$`));
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    }
+
+    // If maxNum is 0, we check if the base itself exists. If base exists, next is (1).
+    // Actually, if we are duplicating, we always want at least (1).
+    // If the highest is (N), we want (N+1).
+    const newTitle = `${baseTitle} (${maxNum + 1})`;
+    
+    const baseSlug = makeBaseSlug(newTitle);
+    const slug = await generateProjectSlug(tx, baseSlug, workspaceId);
+
+    const newProject = await tx.project.create({
+      data: {
+        workspaceId,
+        areaId: originalProject.areaId,
+        title: newTitle,
+        slug,
+        description: originalProject.description,
+        createdById: userId,
+      },
+    });
+
+    // Duplicate all items
+    if (originalProject.items && originalProject.items.length > 0) {
+      const newItems = originalProject.items.map((item) => ({
+        workspaceId,
+        projectId: newProject.id,
+        title: item.title,
+        type: item.type,
+        status: item.status,
+        contentString: item.contentString,
+        contentJson: item.contentJson ? JSON.parse(JSON.stringify(item.contentJson)) : null,
+        url: item.url,
+        metadata: item.metadata ? JSON.parse(JSON.stringify(item.metadata)) : null,
+        createdById: userId,
+      }));
+
+      await tx.item.createMany({
+        data: newItems,
+      });
+    }
+
+    return newProject;
   });
 }

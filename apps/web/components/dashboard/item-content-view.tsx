@@ -12,10 +12,8 @@ export type ItemContentViewProps = {
   onTagsClick?: () => void;
   tagsPopover?: React.ReactNode; // To mount the popover absolute to the tag button if needed
   
-  onInfoClick?: () => void;
-  infoPopover?: React.ReactNode;
-  
   onMoreClick?: () => void;
+  morePopover?: React.ReactNode;
   
   bottomStatusText?: string;
   bottomActions?: React.ReactNode;
@@ -32,9 +30,8 @@ export function ItemContentView({
   tagsCount = 0,
   onTagsClick,
   tagsPopover,
-  onInfoClick,
-  infoPopover,
   onMoreClick,
+  morePopover,
   bottomStatusText,
   bottomActions,
   placeholderTitle = "Untitled Resource",
@@ -57,12 +54,15 @@ export function ItemContentView({
               </button>
               {tagsPopover}
             </div>
-            <button 
-              onClick={onMoreClick}
-              className="flex items-center justify-center w-7 h-7 rounded-md bg-[#151618] border border-[#27282B] text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
-            >
-              <MoreVertical className="w-3.5 h-3.5" />
-            </button>
+            <div className="relative flex items-center">
+              <button 
+                onClick={onMoreClick}
+                className="flex items-center justify-center w-7 h-7 rounded-md bg-[#151618] border border-[#27282B] text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+              >
+                <MoreVertical className="w-3.5 h-3.5" />
+              </button>
+              {morePopover}
+            </div>
           </div>
           <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#151618] border border-[#27282B] text-[11px] font-medium text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
             Open Source
@@ -85,15 +85,6 @@ export function ItemContentView({
               className="col-start-1 row-start-1 w-full bg-transparent text-[24px] font-semibold text-[#EEEEEE] placeholder:text-[#5A5D66] outline-none border-none focus:ring-0 p-0 m-0 min-w-0"
               placeholder={placeholderTitle}
             />
-          </div>
-          <div className="relative shrink-0 flex items-center h-full">
-            <button 
-              onClick={onInfoClick}
-              className="flex items-center justify-center w-6 h-6 rounded-md text-[#5A5D66] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors shrink-0"
-            >
-              <Info className="w-4 h-4" />
-            </button>
-            {infoPopover}
           </div>
         </div>
 

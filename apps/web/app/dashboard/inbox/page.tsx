@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   FileText, Link as LinkIcon, Layout, Book, FolderGit2, Tag,
   CheckCircle, ChevronRight, Search, Filter, X, PanelLeftClose, PanelLeft, Video,
-  ExternalLink, Info, FilePlus
+  ExternalLink, Info, FilePlus, FilePenLine, Copy, CopyPlus, Trash2, List
 } from 'lucide-react';
 import { Navigator } from '../../../lib/navigator';
 import { ItemContentView } from '../../../components/dashboard/item-content-view';
@@ -30,7 +30,7 @@ const INITIAL_TAGS = ['ui', 'bug', 'backend', 'ai', 'planning'];
 
 const TYPE_OPTIONS = [
   { value: 'all', label: 'All Types' },
-  { value: 'note', label: 'Notes', icon: FileText },
+  { value: 'note', label: 'Notes', icon: FilePenLine },
   { value: 'link', label: 'Links', icon: LinkIcon },
   { value: 'video', label: 'Videos', icon: Video },
   { value: 'doc', label: 'Docs', icon: FileText },
@@ -38,7 +38,8 @@ const TYPE_OPTIONS = [
 
 const getIcon = (type: string) => {
   switch (type.toLowerCase()) {
-    case 'note': return FileText;
+    case 'note': return FilePenLine;
+    case 'quick_note': return FilePenLine;
     case 'link': return LinkIcon;
     case 'video': return Video;
     case 'doc': return FileText;
@@ -79,7 +80,7 @@ export default function InboxPage() {
 
       const [itemsRes, projectsRes] = await Promise.all([
         api.get<{ data: InboxItem[] }>(`/workspaces/${workspaceId}/item/inbox`),
-        api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project`)
+        api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project?all=true`)
       ]);
 
       const fetchedItems = itemsRes.data || [];
@@ -131,6 +132,7 @@ export default function InboxPage() {
   const [filterTags, setFilterTags] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [infoPopoverOpen, setInfoPopoverOpen] = useState(false);
+  const [morePopoverOpen, setMorePopoverOpen] = useState(false);
 
   const selectedItem = items.find(i => i.id === selectedId);
   const projectInputRef = useRef<HTMLInputElement>(null);
@@ -577,30 +579,99 @@ export default function InboxPage() {
                   </div>
                 </>
               )}
-              onInfoClick={() => setInfoPopoverOpen(!infoPopoverOpen)}
-              infoPopover={infoPopoverOpen && (
+              onMoreClick={() => setMorePopoverOpen(!morePopoverOpen)}
+              morePopover={
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setInfoPopoverOpen(false)} />
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col p-4 space-y-4 text-left">
-                    <div>
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Source</span>
-                      <p className="text-[13px] text-foreground mt-1 truncate">https://example.com/source</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Author</span>
-                      <p className="text-[13px] text-foreground mt-1">Jane Doe</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</span>
-                      <p className="text-[13px] text-foreground mt-1 capitalize">{selectedItem.type}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Saved</span>
-                      <p className="text-[13px] text-foreground mt-1">{new Date(selectedItem.updatedAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
+                  {morePopoverOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setMorePopoverOpen(false)} />
+                      <div className="absolute top-full left-0 mt-2 w-48 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col p-1 text-left text-[13px]">
+                        <div 
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted text-muted-foreground hover:text-foreground transition-colors rounded-[6px]"
+                          onClick={() => {
+                            setMorePopoverOpen(false);
+                            setInfoPopoverOpen(true);
+                          }}
+                        >
+                          <List className="w-4 h-4" />
+                          Details
+                        </div>
+                        <div 
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted text-muted-foreground hover:text-foreground transition-colors rounded-[6px]"
+                          onClick={() => {
+                            setMorePopoverOpen(false);
+                            navigator.clipboard.writeText(`${window.location.origin}/dashboard/inbox?id=${selectedId}`);
+                          }}
+                        >
+                          <Copy className="w-4 h-4" />
+                          Copy Link
+                        </div>
+                        <div 
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted text-muted-foreground hover:text-foreground transition-colors rounded-[6px]"
+                          onClick={async () => {
+                            setMorePopoverOpen(false);
+                            try {
+                              const workspaceId = await resolveWorkspaceId();
+                              if (!workspaceId) return;
+                              const res = await api.post<{ data: InboxItem }>(`/workspaces/${workspaceId}/item/${selectedId}/duplicate`);
+                              setItems([res.data, ...items]);
+                              setSelectedId(res.data.id);
+                            } catch (err) {
+                              console.error("Failed to duplicate item", err);
+                            }
+                          }}
+                        >
+                          <CopyPlus className="w-4 h-4" />
+                          Duplicate
+                        </div>
+                        <div className="h-[1px] bg-border my-1" />
+                        <div 
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-red-500/10 text-red-500/80 hover:text-red-500 transition-colors rounded-[6px]"
+                          onClick={async () => {
+                            setMorePopoverOpen(false);
+                            try {
+                              const workspaceId = await resolveWorkspaceId();
+                              if (!workspaceId) return;
+                              await api.patch(`/workspaces/${workspaceId}/item/${selectedId}`, { deletedAt: new Date().toISOString() });
+                              setItems(items.filter(i => i.id !== selectedId));
+                              setSelectedId(null);
+                            } catch (err) {
+                              console.error("Failed to move to trash", err);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Move to Trash
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {infoPopoverOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setInfoPopoverOpen(false)} />
+                      <div className="absolute top-full left-0 mt-2 w-64 bg-surface border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col p-4 space-y-4 text-left">
+                        <div>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Source</span>
+                          <p className="text-[13px] text-foreground mt-1 truncate">https://example.com/source</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Author</span>
+                          <p className="text-[13px] text-foreground mt-1">Jane Doe</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</span>
+                          <p className="text-[13px] text-foreground mt-1 capitalize">{selectedItem.type}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Saved</span>
+                          <p className="text-[13px] text-foreground mt-1">{new Date(selectedItem.updatedAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </>
-              )}
+              }
+              bottomStatusText={selectedItem.updatedAt ? `Saved to Inbox` : ''}
               placeholderTitle={`Untitled ${selectedItem.type.toLowerCase()}`}
               placeholderContent="Capture your thoughts..."
               bottomActions={

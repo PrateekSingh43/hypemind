@@ -93,6 +93,7 @@ const syncQuickNoteTags = async (
 };
 
 export const updateQuickNoteService = async (
+  userId: string,
   itemId: string,
   workspaceId: string,
   payload: QuickNotePayload,
@@ -109,10 +110,17 @@ export const updateQuickNoteService = async (
   const tags = normalizeTags(payload.tags);
 
   const { itemForEvent, note } = await prisma.$transaction(async (tx) => {
+    // Security: Ensure item belongs to the workspace
+    const existing = await tx.item.findFirst({
+      where: { id: itemId, workspaceId },
+    });
+    if (!existing) {
+      throw new Error("Item not found or access denied");
+    }
+
     const itemForEvent = await tx.item.update({
       where: {
         id: itemId,
-        workspaceId, // Security: Ensure item belongs to the workspace
       },
       data: {
         title: payload.title,
@@ -143,7 +151,7 @@ export const updateQuickNoteService = async (
   // Record the edit event
   await prisma.interactionEvent.create({
     data: {
-      userId: itemForEvent.createdById || "",
+      userId,
       workspaceId,
       itemId: itemForEvent.id,
       action: "EDIT",
@@ -160,6 +168,9 @@ export const getQuickNotesService = async (workspaceId: string) => {
       workspaceId,
       type: ItemType.QUICK_NOTE,
       status: ItemStatus.ACTIVE, // Only show active notes in the list
+      projectId: {
+        not: null,
+      },
     },
     orderBy: {
       updatedAt: "desc",
@@ -252,6 +263,100 @@ export const createQuickNoteService = async (payload: {
       itemId: quickNote.id,
       action: InteractionAction.CREATE,
       meta: { type: "quick_note" },
+    },
+  });
+
+  return serializeQuickNote(quickNote);
+};
+
+export const duplicateQuickNoteService = async (
+  userId: string,
+  workspaceId: string,
+  itemId: string
+) => {
+  const originalItem = await prisma.item.findFirst({
+    where: { id: itemId, workspaceId },
+    include: { tags: { include: { tag: true } } },
+  });
+
+  if (!originalItem) {
+    throw new Error("Item not found");
+  }
+
+  const titleMatch = (originalItem.title || "Untitled Note").match(/^(.*) \((\d+)\)$/);
+  let baseTitle = originalItem.title || "Untitled Note";
+  if (titleMatch) {
+    baseTitle = titleMatch[1];
+  } else {
+    const copyMatch = baseTitle.match(/^(.*) \(Copy\)$/);
+    if (copyMatch) {
+      baseTitle = copyMatch[1];
+    }
+  }
+
+  const existingItems = await prisma.item.findMany({
+    where: {
+      workspaceId,
+      type: ItemType.QUICK_NOTE,
+      title: {
+        startsWith: baseTitle,
+      },
+    },
+    select: { title: true },
+  });
+
+  let maxNum = 0;
+  for (const p of existingItems) {
+    if (p.title === baseTitle) {
+      // base exists
+    } else {
+      const escapedBase = baseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = (p.title || "").match(new RegExp(`^${escapedBase} \\((\\d+)\\)$`));
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+  }
+
+  const newTitle = `${baseTitle} (${maxNum + 1})`;
+
+  const quickNote = await prisma.$transaction(async (tx) => {
+    const created = await tx.item.create({
+      data: {
+        title: newTitle,
+        contentString: originalItem.contentString,
+        contentJson: originalItem.contentJson
+          ? JSON.parse(JSON.stringify(originalItem.contentJson))
+          : undefined,
+        type: ItemType.QUICK_NOTE,
+        status: ItemStatus.ACTIVE,
+        isPinned: originalItem.isPinned,
+        workspaceId,
+        createdById: userId,
+        projectId: originalItem.projectId,
+      },
+    });
+
+    const tags = originalItem.tags.map(t => t.tag.name);
+    await syncQuickNoteTags(tx, workspaceId, created.id, tags);
+
+    return tx.item.findFirstOrThrow({
+      where: {
+        id: created.id,
+        workspaceId,
+      },
+      select: quickNoteSelect,
+    });
+  });
+
+  await prisma.interactionEvent.create({
+    data: {
+      userId,
+      workspaceId,
+      itemId: quickNote.id,
+      action: InteractionAction.DUPLICATE,
+      meta: { type: "quick_note", originalId: itemId },
     },
   });
 

@@ -6,6 +6,7 @@ import {
   createWorkspaceService,
   getWorkspaceBootstrapService,
   listWorkspacesService,
+  getPinnedItemsService,
 } from "./workspace.service";
 
 export const listWorkspacesController = asyncHandler(
@@ -45,6 +46,18 @@ export const getWorkspaceBootstrapController = asyncHandler(
     }
 
     const result = await getWorkspaceBootstrapService(workspaceId);
+    res.status(200).json({ success: true, data: result });
+  },
+);
+
+export const getPinnedItemsController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { workspaceId } = req.params;
+    if (!workspaceId) {
+      throw new BadRequestError("Workspace ID is required");
+    }
+
+    const result = await getPinnedItemsService(workspaceId);
     res.status(200).json({ success: true, data: result });
   },
 );

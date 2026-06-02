@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const refreshToken = request.cookies.get("hypemind_refresh")?.value;
   const isLoggedInSignal = request.cookies.get("hm_logged_in")?.value;
 
-  const hasAuth = !!refreshToken || !!isLoggedInSignal;
+  const hasAuth = !!isLoggedInSignal;
 
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard");
 

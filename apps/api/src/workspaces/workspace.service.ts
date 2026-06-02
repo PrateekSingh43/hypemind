@@ -126,3 +126,33 @@ export async function getWorkspaceBootstrapService(workspaceId: string) {
     recentItems,
   };
 }
+
+export async function getPinnedItemsService(workspaceId: string) {
+  const [areas, projects, items] = await Promise.all([
+    prisma.area.findMany({
+      where: {
+        workspaceId,
+        isPinned: true,
+      },
+      orderBy: { pinnedAt: "desc" },
+    }),
+    prisma.project.findMany({
+      where: {
+        workspaceId,
+        isPinned: true,
+        status: "ACTIVE",
+      },
+      orderBy: { pinnedAt: "desc" },
+    }),
+    prisma.item.findMany({
+      where: {
+        workspaceId,
+        isPinned: true,
+        status: "ACTIVE",
+      },
+      orderBy: { pinnedAt: "desc" },
+    }),
+  ]);
+
+  return { areas, projects, items };
+}

@@ -18,11 +18,26 @@ import {
   FolderGit2,
   FileOutput,
   FileText,
+  FilePenLine,
   CheckCircle,
   Loader2,
   Highlighter,
   Search,
+  ChevronRight,
+  Pin,
+  Copy,
+  CopyPlus,
+  Trash2,
+  MoreHorizontal
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@repo/ui/components/dropdown-menu";
+import { formatTimeAgo } from "../../../lib/format-time";
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -40,6 +55,8 @@ type QuickNoteRecord = {
   contentString?: string | null;
   contentJson?: unknown;
   tags?: string[];
+  updatedAt?: string;
+  isPinned?: boolean;
 };
 
 function QuickNoteContent() {
@@ -48,7 +65,11 @@ function QuickNoteContent() {
   const noteId = searchParams.get("id");
 
   const [title, setTitle] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [isPinned, setIsPinned] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [toast, setToast] = useState<{ visible: boolean; message: string; projectName?: string; projectId?: string; } | null>(null);
@@ -98,7 +119,7 @@ function QuickNoteContent() {
 
         const [notesRes, projectsRes] = await Promise.all([
           api.get<{ data: QuickNoteRecord[] }>(`/workspaces/${workspaceId}/item/quick-note`),
-          api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project`)
+          api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project?all=true`)
         ]);
 
         setProjects(projectsRes.data || []);
@@ -116,6 +137,8 @@ function QuickNoteContent() {
 
         setTitle(note.title || "");
         setTags(noteTags);
+        setUpdatedAt(note.updatedAt || null);
+        setIsPinned(!!note.isPinned);
         currentContentRef.current = {
           content: note.contentString || "",
           contentJson: documentContent,
@@ -173,7 +196,9 @@ function QuickNoteContent() {
           payload,
         );
 
-        setLastSaved(new Date());
+        const newDate = new Date();
+        setLastSaved(newDate);
+        setUpdatedAt(newDate.toISOString());
         window.dispatchEvent(
           new CustomEvent("hm:quick-note-updated", {
             detail: {
@@ -352,6 +377,173 @@ function QuickNoteContent() {
           </div>
         </div>
       )}
+
+      {/* Top Breadcrumb Bar */}
+      <div className="h-14 flex items-center justify-between px-6 shrink-0 border-b border-[#27282B] bg-[#0E0F11]">
+        <div className="flex items-center gap-2 text-[12px] text-[#5A5D66] font-medium min-w-0">
+          <span className="hover:text-[#8A8F98] cursor-pointer transition-colors shrink-0">Quick Notes</span>
+          {title && (
+            <>
+              <ChevronRight className="w-3 h-3 shrink-0" />
+              <span className="text-[#8A8F98] truncate max-w-[200px]">{title}</span>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 ml-4 relative">
+          <span className="text-[12px] text-[#5A5D66] mr-2">Edited {formatTimeAgo(updatedAt)}</span>
+          
+          <button 
+            onClick={async () => {
+              if (!noteId) return;
+              try {
+                const workspaceId = await resolveWorkspaceId();
+                if (!workspaceId) return;
+                await api.patch(`/workspaces/${workspaceId}/item/${noteId}`, { isPinned: !isPinned });
+                setIsPinned(!isPinned);
+                window.dispatchEvent(new Event('hm:pinned-items-updated'));
+              } catch (e) {
+                console.error("Failed to pin quick note", e);
+              }
+            }}
+            className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+            title={isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          >
+            <Pin className={`w-4 h-4 ${isPinned ? "fill-current text-[#EEEEEE]" : ""}`} />
+          </button>
+
+          <button 
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              showToast("Link copied to clipboard");
+            }}
+            className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
+            title="Copy link"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+              className="w-56 border-[#27282B] bg-[#121315] text-[#EEEEEE] shadow-xl rounded-[8px] p-1.5"
+            >
+              <DropdownMenuItem
+                className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+                onClick={() => showToast("Added to page")}
+              >
+                <FileText className="w-4 h-4" />
+                Add to pages
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+                onClick={() => setProjectPopoverOpen(true)}
+              >
+                <FolderGit2 className="w-4 h-4" />
+                Add to project
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#27282B] my-1.5" />
+              <DropdownMenuItem
+                className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  showToast("Link copied to clipboard");
+                }}
+              >
+                <Copy className="w-4 h-4" />
+                Copy link
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+                onClick={async () => {
+                  if (!noteId) return;
+                  try {
+                    const workspaceId = await resolveWorkspaceId();
+                    if (!workspaceId) return;
+                    await api.post(`/workspaces/${workspaceId}/item/quick-note/${noteId}/duplicate`);
+                    showToast("Note duplicated");
+                    window.dispatchEvent(new Event('hm:quick-notes-updated'));
+                  } catch (err) {
+                    console.error("Failed to duplicate quick note", err);
+                  }
+                }}
+              >
+                <CopyPlus className="w-4 h-4" />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer py-2 px-3 text-[13px] font-medium text-[#8A8F98] focus:text-[#EEEEEE] focus:bg-[#26272B] rounded-[6px] flex items-center gap-2"
+                onClick={() => {
+                  setRenameValue(title);
+                  setIsRenaming(true);
+                }}
+              >
+                <FileOutput className="w-4 h-4" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#27282B] my-1.5" />
+              <DropdownMenuItem
+                className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+                onClick={async () => {
+                  if (!noteId) return;
+                  try {
+                    const workspaceId = await resolveWorkspaceId();
+                    if (!workspaceId) return;
+                    await api.patch(`/workspaces/${workspaceId}/item/quick-note/${noteId}`, { deletedAt: new Date().toISOString() });
+                    router.push('/dashboard');
+                    window.dispatchEvent(new Event('hm:quick-notes-updated'));
+                  } catch (err) {
+                    console.error("Failed to move to trash", err);
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+                Move to trash
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {isRenaming && (
+            <>
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTitle(renameValue);
+                  setIsRenaming(false);
+                  void saveNote({ title: renameValue });
+                }} 
+              />
+              <div className="absolute top-[38px] right-0 z-50 bg-[#151618] border border-[#27282B] rounded-[6px] shadow-2xl p-1 flex items-center gap-1.5 w-[360px]">
+                <div className="flex items-center justify-center w-7 h-7 rounded-[4px] border border-[#27282B] bg-[#0E0F11] shrink-0 text-[#8A8F98]">
+                  <FilePenLine className="w-4 h-4" />
+                </div>
+                <input
+                  autoFocus
+                  className="flex-1 bg-[#0E0F11] text-[13px] font-medium text-[#EEEEEE] px-2.5 py-1.5 border border-[#27282B] rounded-[4px] outline-none focus:border-[#8A8F98] transition-colors min-w-0 relative z-50"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setTitle(renameValue);
+                      setIsRenaming(false);
+                      void saveNote({ title: renameValue });
+                    } else if (e.key === 'Escape') {
+                      setIsRenaming(false);
+                    }
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       <div className="flex flex-col flex-1 min-h-0 max-w-[720px] w-full mx-auto px-6 md:px-0">
         <QuickNoteEditor

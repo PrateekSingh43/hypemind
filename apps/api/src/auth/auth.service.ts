@@ -281,6 +281,10 @@ export async function loginService(
     throw new ForbiddenError("Password is wrong try again");
   }
 
+  if (!exitingUser.emailVerified) {
+    throw new ForbiddenError("Email not verified. Please verify your email first");
+  }
+
   const accessToken = generateAccessToken(exitingUser.id);
 
   const { raw, expiresAt } = await generateRefreshToken(exitingUser.id);
