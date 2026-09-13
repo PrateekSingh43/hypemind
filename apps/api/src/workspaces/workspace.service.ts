@@ -149,6 +149,7 @@ export async function getPinnedItemsService(workspaceId: string) {
         workspaceId,
         isPinned: true,
         status: "ACTIVE",
+        deletedAt: null,
       },
       orderBy: { pinnedAt: "desc" },
     }),

@@ -8,7 +8,7 @@ import {
 import { BadRequestError, UnauthorizedError } from "../errors/httpErrors";
 
 const MAX_QUICK_NOTE_LENGTH = 2500;
-const MAX_QUICK_NOTE_TAGS = 20;
+const MAX_QUICK_NOTE_TAGS = 10;
 
 const quickNoteSelect = {
   id: true,
@@ -40,6 +40,7 @@ type QuickNotePayload = {
   status?: string;
   isPinned?: boolean;
   projectId?: string;
+  deletedAt?: Date | string | null;
   tags?: string[];
 };
 
@@ -132,6 +133,7 @@ export const updateQuickNoteService = async (
         status: payload.status as ItemStatus | undefined,
         isPinned: payload.isPinned,
         projectId: payload.projectId,
+        deletedAt: payload.deletedAt,
       },
     });
 
@@ -148,16 +150,6 @@ export const updateQuickNoteService = async (
     return { itemForEvent, note };
   });
 
-  // Record the edit event
-  await prisma.interactionEvent.create({
-    data: {
-      userId,
-      workspaceId,
-      itemId: itemForEvent.id,
-      action: "EDIT",
-      meta: { fields: Object.keys(payload) },
-    },
-  });
 
   return serializeQuickNote(note);
 };
@@ -168,9 +160,7 @@ export const getQuickNotesService = async (workspaceId: string) => {
       workspaceId,
       type: ItemType.QUICK_NOTE,
       status: ItemStatus.ACTIVE, // Only show active notes in the list
-      projectId: {
-        not: null,
-      },
+      deletedAt: null,
     },
     orderBy: {
       updatedAt: "desc",

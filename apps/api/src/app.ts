@@ -26,7 +26,7 @@ app.use(helmet({
 }));
 app.use(requestLogger);
 app.use(cookieParser());
-app.use(express.json({ limit: "10kb" })); // Prevent large JSON payloads
+app.use(express.json({ limit: "2mb" })); // Page documents can legitimately exceed 10kb
 
 // 2.5 Rate Limiting
 const isExempt = async (req: express.Request) => {

@@ -9,7 +9,7 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Field } from "@repo/ui/components/field";
 import { Alert } from "@repo/ui/components/alert";
-import { api } from "../../lib/api";
+import {api} from "../../../lib/api" ; 
 
 
 
@@ -59,8 +59,9 @@ export default function SignupPage() {
 			}
 
 			setSuccess(true);
-		} catch (err: any) {
-			setError(err.message || "Failed to create account");
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			setError(message || "Failed to create account");
 		} finally {
 			setIsLoading(false);
 		}
@@ -80,7 +81,7 @@ export default function SignupPage() {
 					Check your email
 				</h2>
 				<p className="text-foreground-muted mb-6 max-w-sm mx-auto">
-					We've sent a verification link to{" "}
+					We&apos;ve sent a verification link to{" "}
 					<span className="font-medium text-foreground">{email}</span>.
 					Click the link to activate your account.
 				</p>
@@ -101,7 +102,10 @@ export default function SignupPage() {
 								await api.post("/auth/resend-verification", {
 									email: email.trim().toLowerCase()
 								});
-							} catch { }
+							} catch (err: unknown) {
+								const message = err instanceof Error ? err.message : String(err);
+								setError(message || "Failed to resend verification email");
+							}
 						}}
 					>
 						Resend verification email

@@ -1,3 +1,5 @@
+//C:\Users\prate\hypemind\apps\web\components\dashboard\right-sidebar.tsx
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";

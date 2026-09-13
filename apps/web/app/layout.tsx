@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Syne } from "next/font/google";
 
 import { AppProvider } from "./provider";
 import "./globals.css";
@@ -10,9 +10,17 @@ const inter = Inter({
 	display: "swap",
 });
 
+const syne = Syne({
+	variable: "--font-display",
+	subsets: ["latin"],
+	weight: ["400", "500", "600", "700", "800"],
+	display: "swap",
+});
+
 export const metadata: Metadata = {
-	title: "HypeMind - Your Second Brain",
-	description: "Capture ideas, organize with PARA, and let your thoughts evolve.",
+	title: "HypeMind — A workspace that remembers",
+	description:
+		"Stop rebuilding context. Capture notes, meetings, and decisions once — HypeMind connects them and recalls them with AI that never starts from zero.",
 };
 
 export default function RootLayout({
@@ -22,9 +30,12 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="en" suppressHydrationWarning>
-			<body className={`${inter.variable} antialiased bg-background text-foreground`} suppressHydrationWarning>
+			<body
+				className={`${inter.variable} ${syne.variable} antialiased bg-background text-foreground`}
+				suppressHydrationWarning
+			>
 				<AppProvider>{children}</AppProvider>
 			</body>
 		</html>
 	);
-}
+}

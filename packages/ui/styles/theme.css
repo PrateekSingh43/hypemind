@@ -7,10 +7,19 @@
     --muted: 210 12% 94%;          /* #EEF0F2 */
     --muted-foreground: 219 9% 57%; /* #8A8F98 */
     --border: 210 8% 92%;          /* #EAEBEC */
-    --border-hover: 210 10% 86%;   
+    --border-hover: 210 10% 86%;
     --primary: 234 56% 60%;        /* #5E6AD2 */
     --primary-foreground: 0 0% 100%;
     --radius: 0.5rem;
+
+    /* Marketing extras — Light */
+    --accent-glow: 234 56% 60%;
+    --text-hero: 210 6% 7%;
+    --hero-bg-start: 0 0% 100%;
+    --hero-bg-end: 240 20% 97%;
+    --card-bg: 0 0% 100%;
+    --card-border: 210 8% 88%;
+    --inset-bg: 210 14% 96%;
   }
 
   .dark,
@@ -21,8 +30,28 @@
     --muted: 210 5% 15%;           /* #242628 */
     --muted-foreground: 219 9% 57%; /* #8A8F98 */
     --border: 210 6% 16%;          /* #27282B */
-    --border-hover: 210 6% 25%;    
+    --border-hover: 210 6% 25%;
     --primary: 234 56% 60%;        /* #5E6AD2 */
     --primary-foreground: 0 0% 100%;
+
+    /* Marketing extras — Dark */
+    --accent-glow: 234 56% 60%;
+    --text-hero: 0 0% 93%;
+    --hero-bg-start: 210 7% 6%;
+    --hero-bg-end: 234 15% 8%;
+    --card-bg: 210 6% 9%;
+    --card-border: 210 6% 18%;
+    --inset-bg: 210 5% 8%;
+  }
+
+  /* Global animation tokens — not theme-specific */
+  :root {
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slow: 400ms;
+    --duration-xslow: 800ms;
+    --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

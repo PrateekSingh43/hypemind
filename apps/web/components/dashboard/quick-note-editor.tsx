@@ -16,7 +16,6 @@ import {
 import { useEditor, EditorContent } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import UnderlineExtension from "@tiptap/extension-underline";
 import HighlightExtension from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 
@@ -84,12 +83,12 @@ export function QuickNoteEditor({
   // Initialize Editor
   const editor = useEditor({
     extensions: [
+      // StarterKit v3 includes Underline (and Link, TrailingNode, etc.)
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         bulletList: { keepMarks: true, keepAttributes: false },
         orderedList: { keepMarks: true, keepAttributes: false },
       }),
-      UnderlineExtension,
       HighlightExtension,
       Placeholder.configure({
         placeholder: "Start writing your note...",

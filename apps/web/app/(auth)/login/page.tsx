@@ -9,7 +9,7 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Field } from "@repo/ui/components/field";
 import { Alert } from "@repo/ui/components/alert";
-import { api, setAccessToken } from "../../lib/api";
+import { api, setAccessToken } from "../../../lib/api";
 
 function LoginContent() {
   const searchParams = useSearchParams();

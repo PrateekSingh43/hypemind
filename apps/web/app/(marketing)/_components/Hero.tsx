@@ -1,79 +1,172 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { motion } from "motion/react";
+import { useRef } from "react";
+import { motion, useInView } from "motion/react";
+import { ArrowRight, Sparkles, FileText, Search, FolderGit2, CheckCircle2, ShieldAlert } from "lucide-react";
+
+const EASE = [0.16, 1, 0.3, 1] as [number, number, number, number];
+const STAGGER = 0.07;
 
 export function Hero() {
-	return (
-		<section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
-			{/* Background Gradients */}
-			<div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-primary/20 blur-[120px] rounded-full opacity-50 pointer-events-none" />
-			<div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
 
-			<div className="container px-4 mx-auto text-center relative z-10 max-w-5xl">
-				<motion.div
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.5 }}
-					className="inline-flex items-center justify-center px-4 py-1.5 mb-8 text-sm font-medium transition-colors border rounded-full bg-secondary/50 border-border hover:bg-secondary/80 backdrop-blur-sm"
-				>
-					<span className="flex h-2 w-2 rounded-full bg-primary mr-2 shadow-[0_0_10px] shadow-primary/50" />
-					<span className="text-secondary-foreground">v2.0 is now live</span>
-					<ArrowRight className="ml-2 w-3 h-3 text-muted-foreground" />
-				</motion.div>
+  return (
+    <section className="marketing-hero grain-overlay" aria-label="Hero">
+      <div className="dot-grid" style={{ position: "absolute", inset: 0, pointerEvents: "none" }} aria-hidden="true" />
+      <div className="hero-glow" aria-hidden="true" />
 
-				<motion.h1
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.5, delay: 0.1 }}
-					className="text-6xl md:text-8xl font-bold tracking-tight text-foreground mb-8 leading-[1.1]"
-				>
-					Your Second Brain, <br />
-					<span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-blue-500 animate-gradient-x">
-						Supercharged.
-					</span>
-				</motion.h1>
+      <div ref={ref} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <motion.div
+          className="hero-eyebrow"
+          initial={{ opacity: 0, y: 12 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, ease: EASE }}
+        >
+          <span className="hero-eyebrow-dot" />
+          A workspace that remembers
+        </motion.div>
 
-				<motion.p
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.5, delay: 0.2 }}
-					className="max-w-2xl mx-auto text-xl md:text-2xl text-muted-foreground mb-12 leading-relaxed"
-				>
-					Capture ideas, manage projects, and organize your life with a tool designed for speed and clarity. The all-in-one workspace for high performers.
-				</motion.p>
+        <motion.h1
+          className="hero-h1 font-display"
+          initial={{ opacity: 0, y: 22 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.55, ease: EASE, delay: STAGGER }}
+        >
+          Stop rebuilding context.
+          <br />
+          <span className="hero-h1-gradient">Start building memory.</span>
+        </motion.h1>
 
-				<motion.div
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.5, delay: 0.3 }}
-					className="flex flex-col sm:flex-row items-center justify-center gap-4"
-				>
-					<Link
-						href="/dashboard"
-						className="inline-flex items-center justify-center h-14 px-8 text-base font-semibold text-white transition-all rounded-full bg-primary hover:bg-primary/90 shadow-[0_0_20px_-5px_hsl(var(--primary)/0.5)] hover:shadow-[0_0_30px_-5px_hsl(var(--primary)/0.6)] hover:-translate-y-0.5"
-					>
-						Get Started <ArrowRight className="ml-2 h-4 w-4" />
-					</Link>
-					<Link
-						href="/login"
-						className="inline-flex items-center justify-center h-14 px-8 text-base font-medium transition-all rounded-full text-foreground hover:bg-secondary border border-border hover:border-border/80"
-					>
-						View Demo
-					</Link>
-				</motion.div>
+        <motion.p
+          className="hero-subtext"
+          initial={{ opacity: 0, y: 16 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, ease: EASE, delay: STAGGER * 2 }}
+        >
+          Capture your work. We connect the dots. Your AI stays in context.
+        </motion.p>
 
-				{/* Abstract shapes/decorations */}
-				<motion.div
-					initial={{ opacity: 0, scale: 0.8 }}
-					animate={{ opacity: 1, scale: 1 }}
-					transition={{ duration: 1, delay: 0.5 }}
-					className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -z-10 opacity-20 hidden md:block"
-				>
-					<Sparkles className="w-24 h-24 text-primary" />
-				</motion.div>
-			</div>
-		</section>
-	);
+        <motion.div
+          className="hero-cta-group"
+          initial={{ opacity: 0, y: 12 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, ease: EASE, delay: STAGGER * 3 }}
+        >
+          <Link href="/dashboard" className="btn-primary-marketing">
+            Start for free
+            <ArrowRight size={14} />
+          </Link>
+          <Link href="#features" className="btn-secondary-marketing">
+            Explore live features
+          </Link>
+        </motion.div>
+
+        <motion.p
+          className="hero-trust-line"
+          initial={{ opacity: 0 }}
+          animate={inView ? { opacity: 1 } : {}}
+          transition={{ duration: 0.5, ease: EASE, delay: STAGGER * 4 }}
+        >
+          No credit card required · Free tier included · Built for software teams
+        </motion.p>
+      </div>
+
+      {/* Hero Product Frame (Linear-style UI Screenshot) */}
+      <motion.div
+        className="hero-showcase-wrap"
+        initial={{ opacity: 0, y: 36 }}
+        animate={inView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.7, ease: EASE, delay: 0.25 }}
+      >
+        <div className="hero-app-frame">
+          {/* Mac-style Window Chrome */}
+          <div className="app-header">
+            <span className="app-header-dot" />
+            <span className="app-header-dot" />
+            <span className="app-header-dot" />
+            <span className="app-header-title">HypeMind — Workspace Memory Engine</span>
+          </div>
+
+          <div className="app-body">
+            {/* Sidebar */}
+            <div className="app-sidebar">
+              <div className="app-sidebar-section">
+                <span className="app-sidebar-label">PARA Workspace</span>
+                <div className="app-sidebar-item active">
+                  <FolderGit2 size={13} color="var(--mkt-accent)" />
+                  <span>HypeMind MVP</span>
+                </div>
+                <div className="app-sidebar-item">
+                  <FileText size={13} />
+                  <span>Auth Architecture</span>
+                </div>
+                <div className="app-sidebar-item">
+                  <FileText size={13} />
+                  <span>Stripe API Notes</span>
+                </div>
+              </div>
+              <div className="app-sidebar-section">
+                <span className="app-sidebar-label">Quick Capture</span>
+                <div className="app-sidebar-item">
+                  <CheckCircle2 size={13} />
+                  <span>Action Items (4)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Workspace Frame */}
+            <div className="app-content">
+              <div className="app-topbar">
+                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--mkt-text-dim)" }}>
+                  <Search size={14} color="var(--mkt-text-mid)" />
+                  <span>Search or ask AI: &quot;What authentication strategy did we choose?&quot;</span>
+                </div>
+                <span style={{ fontSize: 11, color: "var(--mkt-text-mid)", fontFamily: "monospace" }}>⌘K</span>
+              </div>
+
+              <div className="app-main">
+                {/* Editor Pane */}
+                <div className="app-editor-pane">
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--mkt-text)" }}>
+                    Authentication & Session Architecture
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--mkt-text-dim)", lineHeight: 1.6 }}>
+                    We locked JWT access tokens (15m expiry) + HTTP-only refresh tokens (7d expiry) stored in secure cookies. Dual-token rotation ensures instant invalidation on logout.
+                  </div>
+                  <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: "var(--r-sm)", background: "rgba(94, 106, 210, 0.08)", border: "1px solid var(--mkt-accent-border)", fontSize: 12, color: "#A5B4FC", display: "flex", alignItems: "center", gap: 8 }}>
+                    <CheckCircle2 size={14} />
+                    <span>Decision logged on May 29 · Referenced in 3 meeting notes</span>
+                  </div>
+                </div>
+
+                {/* AI Context Recall Pane */}
+                <div className="app-ai-pane">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--mkt-text)" }}>
+                    <Sparkles size={13} color="var(--mkt-accent)" />
+                    <span>AI Memory Recall</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--mkt-text-dim)", lineHeight: 1.5 }}>
+                    Synthesized from 4 workspace files:
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ padding: 8, background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-xs)", fontSize: 11, color: "var(--mkt-text)" }}>
+                      📄 <strong>auth-strategy.md</strong> (Primary)
+                    </div>
+                    <div style={{ padding: 8, background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-xs)", fontSize: 11, color: "var(--mkt-text)" }}>
+                      📄 <strong>stripe-api.md</strong> (Security review)
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "auto", fontSize: 11, color: "var(--mkt-text-mid)" }}>
+                    100% grounded in workspace sources.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </section>
+  );
 }

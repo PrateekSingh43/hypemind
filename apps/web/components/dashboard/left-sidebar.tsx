@@ -189,6 +189,36 @@ type SidebarTreeItem = {
   title: string;
 };
 
+type ProjectResponse = SidebarTreeItem & {
+  description?: string | null;
+  tags?: string[];
+};
+
+type AreaResponse = {
+  id: string;
+  title: string;
+  projects: SidebarTreeItem[];
+};
+
+type PinnedItem = {
+  id: string;
+  title?: string | null;
+  type: string;
+  projectId?: string | null;
+};
+
+type PinnedItems = {
+  areas: SidebarTreeItem[];
+  projects: SidebarTreeItem[];
+  items: PinnedItem[];
+};
+
+type GlobalPageSummary = {
+  id: string;
+  title: string;
+  isPinned?: boolean;
+};
+
 type AreaTreeItem = {
   id: string;
   title: string;
@@ -236,7 +266,11 @@ export function LeftSidebar({
   });
   const [areas, setAreas] = useState<AreaTreeItem[]>([]);
   const [projects, setProjects] = useState<SidebarTreeItem[]>([]);
-  const [pinnedItems, setPinnedItems] = useState<{ areas: any[], projects: any[], items: any[] }>({ areas: [], projects: [], items: [] });
+  const [pinnedItems, setPinnedItems] = useState<PinnedItems>({
+    areas: [],
+    projects: [],
+    items: [],
+  });
   const [areasLoading, setAreasLoading] = useState(true);
   const [openAreas, setOpenAreas] = useState<Record<string, boolean>>({});
   const [quickNotes, setQuickNotes] = useState<QuickNoteSummary[]>([]);
@@ -244,16 +278,37 @@ export function LeftSidebar({
   const [isCreatingQuickNote, setIsCreatingQuickNote] = useState(false);
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
   const [isNewAreaDialogOpen, setIsNewAreaDialogOpen] = useState(false);
-  const [isAreaProjectPopoverOpen, setIsAreaProjectPopoverOpen] = useState(false);
-  const [isProjectAreaPopoverOpen, setIsProjectAreaPopoverOpen] = useState(false);
-  const [activeProjectIdForArea, setActiveProjectIdForArea] = useState<string | undefined>();
-  const [projectToEdit, setProjectToEdit] = useState<{ id: string; title: string; description?: string; tags?: string[] } | null>(null);
-  const [areaToEdit, setAreaToEdit] = useState<{ id: string; title: string; description?: string; tags?: string[] } | null>(null);
+  const [isAreaProjectPopoverOpen, setIsAreaProjectPopoverOpen] =
+    useState(false);
+  const [isProjectAreaPopoverOpen, setIsProjectAreaPopoverOpen] =
+    useState(false);
+  const [activeProjectIdForArea, setActiveProjectIdForArea] = useState<
+    string | undefined
+  >();
+  const [projectToEdit, setProjectToEdit] = useState<{
+    id: string;
+    title: string;
+    description?: string;
+    tags?: string[];
+  } | null>(null);
+  const [areaToEdit, setAreaToEdit] = useState<{
+    id: string;
+    title: string;
+    description?: string;
+    tags?: string[];
+  } | null>(null);
   const [isPinnedPopoverOpen, setIsPinnedPopoverOpen] = useState(false);
-  const [activeAreaIdForProject, setActiveAreaIdForProject] = useState<string | undefined>();
-  const [globalPages, setGlobalPages] = useState<{ id: string; title: string; isPinned?: boolean }[]>([]);
-  const [selectedGlobalPageId, setSelectedGlobalPageId] = useState<string | null>(null);
-  const [isGlobalPagesListCollapsed, setIsGlobalPagesListCollapsed] = useState(true);
+  const [activeAreaIdForProject, setActiveAreaIdForProject] = useState<
+    string | undefined
+  >();
+  const [globalPages, setGlobalPages] = useState<
+    { id: string; title: string; isPinned?: boolean }[]
+  >([]);
+  const [selectedGlobalPageId, setSelectedGlobalPageId] = useState<
+    string | null
+  >(null);
+  const [isGlobalPagesListCollapsed, setIsGlobalPagesListCollapsed] =
+    useState(true);
 
   const currentWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
@@ -280,7 +335,9 @@ export function LeftSidebar({
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
-      const res = await api.get<{ data: any[] }>(`/workspaces/${workspaceId}/project`);
+      const res = await api.get<{ data: ProjectResponse[] }>(
+        `/workspaces/${workspaceId}/project`,
+      );
       setProjects(res.data.map((p) => ({ id: p.id, title: p.title })));
     } catch (err) {
       console.error("Failed to fetch projects for sidebar:", err);
@@ -291,7 +348,9 @@ export function LeftSidebar({
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
-      const res = await api.get<{ data: { areas: any[], projects: any[], items: any[] } }>(`/workspaces/${workspaceId}/pinned`);
+      const res = await api.get<{ data: PinnedItems }>(
+        `/workspaces/${workspaceId}/pinned`,
+      );
       setPinnedItems(res.data || { areas: [], projects: [], items: [] });
     } catch (err) {
       console.error("Failed to fetch pinned items:", err);
@@ -303,8 +362,16 @@ export function LeftSidebar({
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
-      const res = await api.get<{ data: any[] }>(`/workspaces/${workspaceId}/area`);
-      setAreas(res.data.map((a) => ({ id: a.id, title: a.title, projects: a.projects })));
+      const res = await api.get<{ data: AreaResponse[] }>(
+        `/workspaces/${workspaceId}/area`,
+      );
+      setAreas(
+        res.data.map((a) => ({
+          id: a.id,
+          title: a.title,
+          projects: a.projects,
+        })),
+      );
     } catch (err) {
       console.error("Failed to fetch areas for sidebar:", err);
     } finally {
@@ -353,6 +420,12 @@ export function LeftSidebar({
   }, []);
 
   useEffect(() => {
+    window.addEventListener("hm:quick-notes-updated", fetchQuickNotes);
+    return () =>
+      window.removeEventListener("hm:quick-notes-updated", fetchQuickNotes);
+  }, [fetchQuickNotes]);
+
+  useEffect(() => {
     let cancelled = false;
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 1000;
@@ -379,7 +452,7 @@ export function LeftSidebar({
               (word: string) =>
                 word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
             )
-            .join("");
+            .join(" ");
           setUserName(formatted);
         }
 
@@ -425,6 +498,7 @@ export function LeftSidebar({
         }
       }
     };
+
     fetchSessionAndWorkspaces();
     return () => {
       cancelled = true;
@@ -450,8 +524,9 @@ export function LeftSidebar({
   }, [fetchProjects, fetchAreas, fetchPinnedItems]);
 
   useEffect(() => {
-    window.addEventListener('hm:pinned-items-updated', fetchPinnedItems);
-    return () => window.removeEventListener('hm:pinned-items-updated', fetchPinnedItems);
+    window.addEventListener("hm:pinned-items-updated", fetchPinnedItems);
+    return () =>
+      window.removeEventListener("hm:pinned-items-updated", fetchPinnedItems);
   }, [fetchPinnedItems]);
 
   const { setTheme, resolvedTheme } = useTheme();
@@ -491,8 +566,16 @@ export function LeftSidebar({
   const loadGlobalPages = useCallback(async () => {
     try {
       if (!activeWorkspaceId) return;
-      const res = await api.get<{ data: any[] }>(`/workspaces/${activeWorkspaceId}/item/page`);
-      setGlobalPages(res.data.map(page => ({ id: page.id, title: page.title || 'Untitled', isPinned: !!page.isPinned })));
+      const res = await api.get<{ data: GlobalPageSummary[] }>(
+        `/workspaces/${activeWorkspaceId}/item/page`,
+      );
+      setGlobalPages(
+        res.data.map((page) => ({
+          id: page.id,
+          title: page.title || "Untitled",
+          isPinned: !!page.isPinned,
+        })),
+      );
     } catch (err) {
       console.error("Failed to load global pages", err);
     }
@@ -502,51 +585,74 @@ export function LeftSidebar({
     if (expanded.pages) {
       loadGlobalPages();
     }
-    
-    window.addEventListener('hm:global-pages-updated', loadGlobalPages);
-    return () => window.removeEventListener('hm:global-pages-updated', loadGlobalPages);
+
+    window.addEventListener("hm:global-pages-updated", loadGlobalPages);
+    return () =>
+      window.removeEventListener("hm:global-pages-updated", loadGlobalPages);
   }, [expanded.pages, loadGlobalPages]);
 
   useEffect(() => {
-    setSelectedGlobalPageId(localStorage.getItem('hm_global_selected_page'));
-    setIsGlobalPagesListCollapsed(localStorage.getItem('hm_global_pages_sidebar_collapsed') !== 'false');
-    
+    setSelectedGlobalPageId(localStorage.getItem("hm_global_selected_page"));
+    setIsGlobalPagesListCollapsed(
+      localStorage.getItem("hm_global_pages_sidebar_collapsed") !== "false",
+    );
+
     const handleGlobalPageSelected = () => {
-      setSelectedGlobalPageId(localStorage.getItem('hm_global_selected_page'));
-      setIsGlobalPagesListCollapsed(localStorage.getItem('hm_global_pages_sidebar_collapsed') !== 'false');
+      setSelectedGlobalPageId(localStorage.getItem("hm_global_selected_page"));
+      setIsGlobalPagesListCollapsed(
+        localStorage.getItem("hm_global_pages_sidebar_collapsed") !== "false",
+      );
     };
-    
-    window.addEventListener('storage', handleGlobalPageSelected);
-    window.addEventListener('hm:global-pages-sidebar-toggled', handleGlobalPageSelected);
-    window.addEventListener('hm:global-page-selected', handleGlobalPageSelected);
+
+    window.addEventListener("storage", handleGlobalPageSelected);
+    window.addEventListener(
+      "hm:global-pages-sidebar-toggled",
+      handleGlobalPageSelected,
+    );
+    window.addEventListener(
+      "hm:global-page-selected",
+      handleGlobalPageSelected,
+    );
     return () => {
-        window.removeEventListener('storage', handleGlobalPageSelected);
-        window.removeEventListener('hm:global-pages-sidebar-toggled', handleGlobalPageSelected);
-        window.removeEventListener('hm:global-page-selected', handleGlobalPageSelected);
+      window.removeEventListener("storage", handleGlobalPageSelected);
+      window.removeEventListener(
+        "hm:global-pages-sidebar-toggled",
+        handleGlobalPageSelected,
+      );
+      window.removeEventListener(
+        "hm:global-page-selected",
+        handleGlobalPageSelected,
+      );
     };
   }, [pathname]);
 
-  const handleCreateGlobalPage = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      if (!activeWorkspaceId) return;
-      const res = await api.post<{ data: any }>(`/workspaces/${activeWorkspaceId}/item/page`, {
-        title: 'Untitled Page',
-        contentJson: { type: 'doc', content: [{ type: 'paragraph' }] }
-      });
-      
-      const newPageId = res.data.id;
-      localStorage.setItem(`hm_global_selected_page`, newPageId);
-      window.dispatchEvent(new Event('hm:global-page-selected'));
-      setSelectedGlobalPageId(newPageId);
-      
-      setExpanded((prev) => ({ ...prev, pages: true }));
-      await loadGlobalPages();
-      router.push('/dashboard/pages');
-    } catch (err) {
-      console.error("Failed to create global page:", err);
-    }
-  }, [router, loadGlobalPages, activeWorkspaceId]);
+  const handleCreateGlobalPage = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        if (!activeWorkspaceId) return;
+        const res = await api.post<{ data: GlobalPageSummary }>(
+          `/workspaces/${activeWorkspaceId}/item/page`,
+          {
+            title: "Untitled Page",
+            contentJson: { type: "doc", content: [{ type: "paragraph" }] },
+          },
+        );
+
+        const newPageId = res.data.id;
+        localStorage.setItem(`hm_global_selected_page`, newPageId);
+        window.dispatchEvent(new Event("hm:global-page-selected"));
+        setSelectedGlobalPageId(newPageId);
+
+        setExpanded((prev) => ({ ...prev, pages: true }));
+        await loadGlobalPages();
+        router.push("/dashboard/pages");
+      } catch (err) {
+        console.error("Failed to create global page:", err);
+      }
+    },
+    [router, loadGlobalPages, activeWorkspaceId],
+  );
 
   useEffect(() => {
     const handleGlobalShortcut = (e: KeyboardEvent) => {
@@ -611,26 +717,45 @@ export function LeftSidebar({
     setIsNewAreaDialogOpen(true);
   };
 
-  const handleNewProjectSubmit = async ({ title, description, tags, areaId }: { title: string; description: string; tags: string[]; areaId?: string }) => {
+  const handleNewProjectSubmit = async ({
+    title,
+    description,
+    tags,
+    areaId,
+  }: {
+    title: string;
+    description: string;
+    tags: string[];
+    areaId?: string;
+  }) => {
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
 
-      const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/project`, {
-        title,
-        description,
-        tags,
-        areaId,
-      });
+      const res = await api.post<{ data: ProjectResponse }>(
+        `/workspaces/${workspaceId}/project`,
+        {
+          title,
+          description,
+          tags,
+          areaId,
+        },
+      );
 
       const newProject = res.data;
       if (areaId) {
         setAreas((prev) =>
           prev.map((a) =>
             a.id === areaId
-              ? { ...a, projects: [{ id: newProject.id, title: newProject.title }, ...a.projects] }
-              : a
-          )
+              ? {
+                  ...a,
+                  projects: [
+                    { id: newProject.id, title: newProject.title },
+                    ...a.projects,
+                  ],
+                }
+              : a,
+          ),
         );
         setExpanded((prev) => ({ ...prev, area: true }));
         setOpenAreas((prev) => ({ ...prev, [areaId]: true }));
@@ -647,17 +772,28 @@ export function LeftSidebar({
     }
   };
 
-  const handleEditProjectSubmit = async ({ title, description, tags }: { title: string; description: string; tags: string[] }) => {
+  const handleEditProjectSubmit = async ({
+    title,
+    description,
+    tags,
+  }: {
+    title: string;
+    description: string;
+    tags: string[];
+  }) => {
     if (!projectToEdit) return;
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
 
-      await api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${projectToEdit.id}`, {
-        title,
-        description,
-        tags,
-      });
+      await api.patch(
+        `/workspaces/${workspaceId}/project/${projectToEdit.id}`,
+        {
+          title,
+          description,
+          tags,
+        },
+      );
 
       await fetchProjects();
       await fetchAreas();
@@ -675,10 +811,10 @@ export function LeftSidebar({
 
       await Promise.all(
         projectIds.map((projectId) =>
-          api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${projectId}`, {
+          api.patch(`/workspaces/${workspaceId}/project/${projectId}`, {
             areaId: activeAreaIdForProject,
-          })
-        )
+          }),
+        ),
       );
 
       // Refresh data
@@ -696,9 +832,12 @@ export function LeftSidebar({
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId || !activeProjectIdForArea) return;
 
-      await api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${activeProjectIdForArea}`, {
-        areaId: areaId,
-      });
+      await api.patch(
+        `/workspaces/${workspaceId}/project/${activeProjectIdForArea}`,
+        {
+          areaId: areaId,
+        },
+      );
 
       // Refresh data
       await Promise.all([fetchProjects(), fetchAreas()]);
@@ -710,21 +849,37 @@ export function LeftSidebar({
     }
   };
 
-  const handlePinItems = async (areaIds: string[], projectIds: string[], pageIds: string[]) => {
+  const handlePinItems = async (
+    areaIds: string[],
+    projectIds: string[],
+    pageIds: string[],
+  ) => {
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
 
-      const promises: Promise<any>[] = [];
+      const promises: Promise<unknown>[] = [];
 
       for (const areaId of areaIds) {
-        promises.push(api.patch(`/workspaces/${workspaceId}/area/${areaId}`, { isPinned: true }));
+        promises.push(
+          api.patch(`/workspaces/${workspaceId}/area/${areaId}`, {
+            isPinned: true,
+          }),
+        );
       }
       for (const projectId of projectIds) {
-        promises.push(api.patch(`/workspaces/${workspaceId}/project/${projectId}`, { isPinned: true }));
+        promises.push(
+          api.patch(`/workspaces/${workspaceId}/project/${projectId}`, {
+            isPinned: true,
+          }),
+        );
       }
       for (const pageId of pageIds) {
-        promises.push(api.patch(`/workspaces/${workspaceId}/item/${pageId}`, { isPinned: true }));
+        promises.push(
+          api.patch(`/workspaces/${workspaceId}/item/${pageId}`, {
+            isPinned: true,
+          }),
+        );
       }
 
       await Promise.all(promises);
@@ -737,33 +892,49 @@ export function LeftSidebar({
     }
   };
 
-  const handleNewAreaSubmit = async ({ title, description }: { title: string; description: string }) => {
+  const handleNewAreaSubmit = async ({
+    title,
+    description,
+  }: {
+    title: string;
+    description: string;
+  }) => {
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
 
-      const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/area`, {
-        title,
-        description,
-      });
+      const res = await api.post<{ data: AreaResponse }>(
+        `/workspaces/${workspaceId}/area`,
+        {
+          title,
+          description,
+        },
+      );
 
       const newArea = res.data;
-      
+
       if (activeProjectIdForArea) {
-        await api.patch<{ data: any }>(`/workspaces/${workspaceId}/project/${activeProjectIdForArea}`, {
-          areaId: newArea.id,
-        });
+        await api.patch(
+          `/workspaces/${workspaceId}/project/${activeProjectIdForArea}`,
+          {
+            areaId: newArea.id,
+          },
+        );
         await fetchProjects();
       }
 
       setAreas((prev) => {
         const projectsForNewArea = [];
         if (activeProjectIdForArea) {
-           const p = projects.find(proj => proj.id === activeProjectIdForArea);
-           if (p) projectsForNewArea.push({ id: p.id, title: p.title });
+          const p = projects.find((proj) => proj.id === activeProjectIdForArea);
+          if (p) projectsForNewArea.push({ id: p.id, title: p.title });
         }
         return [
-          { id: newArea.id, title: newArea.title, projects: projectsForNewArea },
+          {
+            id: newArea.id,
+            title: newArea.title,
+            projects: projectsForNewArea,
+          },
           ...prev.filter((a) => a.id !== newArea.id),
         ];
       });
@@ -777,22 +948,31 @@ export function LeftSidebar({
     }
   };
 
-  const handleEditAreaSubmit = async ({ title, description }: { title: string; description: string }) => {
+  const handleEditAreaSubmit = async ({
+    title,
+    description,
+  }: {
+    title: string;
+    description: string;
+  }) => {
     if (!areaToEdit) return;
     try {
       const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
       if (!workspaceId) return;
 
-      const res = await api.patch<{ data: any }>(`/workspaces/${workspaceId}/area/${areaToEdit.id}`, {
-        title,
-        description,
-      });
+      const res = await api.patch<{ data: AreaResponse }>(
+        `/workspaces/${workspaceId}/area/${areaToEdit.id}`,
+        {
+          title,
+          description,
+        },
+      );
 
       const updatedArea = res.data;
       setAreas((prev) =>
         prev.map((a) =>
-          a.id === updatedArea.id ? { ...a, title: updatedArea.title } : a
-        )
+          a.id === updatedArea.id ? { ...a, title: updatedArea.title } : a,
+        ),
       );
       setAreaToEdit(null);
     } catch (err) {
@@ -841,27 +1021,32 @@ export function LeftSidebar({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          className="w-56 border-border bg-surface shadow-xl rounded-lg p-1.5 overflow-hidden z-100"
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               if (!activeWorkspaceId) return;
               try {
-                await api.patch(`/workspaces/${activeWorkspaceId}/project/${projectId}`, { isPinned: !isPinned });
+                await api.patch(
+                  `/workspaces/${activeWorkspaceId}/project/${projectId}`,
+                  { isPinned: !isPinned },
+                );
                 await fetchProjects();
                 await fetchAreas();
                 await fetchPinnedItems();
-              } catch (err) {}
+              } catch (error) {
+                console.error("Failed to update project pin:", error);
+              }
             }}
           >
             <Pin className="w-4 h-4" />
             {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
               setActiveProjectIdForArea(projectId);
@@ -873,33 +1058,38 @@ export function LeftSidebar({
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-border/50 my-1.5" />
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
-              navigator.clipboard.writeText(`${window.location.origin}/dashboard/project/${projectId}`);
+              navigator.clipboard.writeText(
+                `${window.location.origin}/dashboard/project/${projectId}`,
+              );
             }}
           >
             <Copy className="w-4 h-4" />
             Copy link
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
-              window.open(`/dashboard/project/${projectId}`, '_blank');
+              window.open(`/dashboard/project/${projectId}`, "_blank");
             }}
           >
             <ExternalLink className="w-4 h-4" />
             Open in a new tab
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
-                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                const workspaceId =
+                  activeWorkspaceId ?? (await resolveWorkspaceId());
                 if (!workspaceId) return;
-                await api.post(`/workspaces/${workspaceId}/project/${projectId}/duplicate`);
+                await api.post(
+                  `/workspaces/${workspaceId}/project/${projectId}/duplicate`,
+                );
                 await fetchProjects();
                 await fetchAreas();
               } catch (err) {
@@ -911,16 +1101,29 @@ export function LeftSidebar({
             Duplicate
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
-                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
-                const res = await api.get<{ data: any }>(`/workspaces/${workspaceId}/project/${projectId}`);
-                setProjectToEdit(res.data);
-              } catch (err) {
-                const proj = projects.find(p => p.id === projectId) || areas.flatMap(a => a.projects).find(p => p.id === projectId);
-                setProjectToEdit({ id: projectId, title: proj?.title || "Untitled" });
+                const workspaceId =
+                  activeWorkspaceId ?? (await resolveWorkspaceId());
+                const res = await api.get<{ data: ProjectResponse }>(
+                  `/workspaces/${workspaceId}/project/${projectId}`,
+                );
+                setProjectToEdit({
+                  ...res.data,
+                  description: res.data.description ?? undefined,
+                });
+              } catch {
+                const proj =
+                  projects.find((p) => p.id === projectId) ||
+                  areas
+                    .flatMap((a) => a.projects)
+                    .find((p) => p.id === projectId);
+                setProjectToEdit({
+                  id: projectId,
+                  title: proj?.title || "Untitled",
+                });
               }
             }}
           >
@@ -928,13 +1131,17 @@ export function LeftSidebar({
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
-                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                const workspaceId =
+                  activeWorkspaceId ?? (await resolveWorkspaceId());
                 if (!workspaceId) return;
-                await api.patch(`/workspaces/${workspaceId}/project/${projectId}`, { deletedAt: new Date() });
+                await api.patch(
+                  `/workspaces/${workspaceId}/project/${projectId}`,
+                  { deletedAt: new Date() },
+                );
                 await fetchProjects();
                 await fetchAreas();
               } catch (err) {
@@ -966,16 +1173,19 @@ export function LeftSidebar({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          className="w-56 border-border bg-surface shadow-xl rounded-lg p-1.5 overflow-hidden z-100"
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               if (!activeWorkspaceId) return;
               try {
-                await api.patch(`/workspaces/${activeWorkspaceId}/area/${areaId}`, { isPinned: !isPinned });
+                await api.patch(
+                  `/workspaces/${activeWorkspaceId}/area/${areaId}`,
+                  { isPinned: !isPinned },
+                );
                 await fetchAreas();
                 await fetchPinnedItems();
               } catch (err) {
@@ -986,12 +1196,14 @@ export function LeftSidebar({
             <Pin className="w-4 h-4" />
             {isPinned ? "Unpin from sidebar" : "Pin to sidebar"}
           </DropdownMenuItem>
-          <div className="h-[1px] bg-border my-1" />
+          <div className="h-px bg-border my-1" />
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
-              navigator.clipboard.writeText(`${window.location.origin}/dashboard`);
+              navigator.clipboard.writeText(
+                `${window.location.origin}/dashboard`,
+              );
               // Actually Area doesn't have a dedicated page, but we add copy link for consistency
             }}
           >
@@ -999,26 +1211,28 @@ export function LeftSidebar({
             Copy link
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
-              window.open(`/dashboard`, '_blank');
+              window.open(`/dashboard`, "_blank");
             }}
           >
             <ExternalLink className="w-4 h-4" />
             Open in a new tab
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               if (!activeWorkspaceId) return;
               try {
-                const res = await api.post<{ data: any }>(`/workspaces/${activeWorkspaceId}/area/${areaId}/duplicate`);
+                const res = await api.post<{ data: AreaResponse }>(
+                  `/workspaces/${activeWorkspaceId}/area/${areaId}/duplicate`,
+                );
                 const newArea = res.data;
                 setAreas((prev) => [
                   { id: newArea.id, title: newArea.title, projects: [] },
-                  ...prev
+                  ...prev,
                 ]);
               } catch (err) {
                 console.error("Failed to duplicate area", err);
@@ -1029,10 +1243,12 @@ export function LeftSidebar({
             Duplicate
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
-              const area = areas.find(a => a.id === areaId) || pinnedItems.areas.find(a => a.id === areaId);
+              const area =
+                areas.find((a) => a.id === areaId) ||
+                pinnedItems.areas.find((a) => a.id === areaId);
               setAreaToEdit({ id: areaId, title: area?.title || "Untitled" });
             }}
           >
@@ -1040,13 +1256,16 @@ export function LeftSidebar({
             Rename
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
-                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                const workspaceId =
+                  activeWorkspaceId ?? (await resolveWorkspaceId());
                 if (!workspaceId) return;
-                await api.patch(`/workspaces/${workspaceId}/area/${areaId}`, { deletedAt: new Date() });
+                await api.patch(`/workspaces/${workspaceId}/area/${areaId}`, {
+                  deletedAt: new Date(),
+                });
                 await fetchAreas();
                 await fetchProjects();
                 await fetchPinnedItems();
@@ -1092,7 +1311,7 @@ export function LeftSidebar({
     setIsMounted(true);
   }, []);
 
-  const renderQuickNoteOptions = (noteId: string) => {
+  const renderQuickNoteOptions = (noteId: string, canMoveToTrash = true) => {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -1108,31 +1327,33 @@ export function LeftSidebar({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          className="w-56 border-border bg-surface shadow-xl rounded-lg p-1.5 overflow-hidden z-100"
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
-              navigator.clipboard.writeText(`${window.location.origin}/dashboard/quick-note?id=${noteId}`);
+              navigator.clipboard.writeText(
+                `${window.location.origin}/dashboard/quick-note?id=${noteId}`,
+              );
             }}
           >
             <Copy className="w-4 h-4" />
             Copy link
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
-                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
+                const workspaceId =
+                  activeWorkspaceId ?? (await resolveWorkspaceId());
                 if (!workspaceId) return;
-                const res = await api.post<{ data: QuickNoteSummary }>(`/workspaces/${workspaceId}/item/quick-note/${noteId}/duplicate`);
-                setQuickNotes((prev) => [
-                  res.data,
-                  ...prev,
-                ]);
+                const res = await api.post<{ data: QuickNoteSummary }>(
+                  `/workspaces/${workspaceId}/item/quick-note/${noteId}/duplicate`,
+                );
+                setQuickNotes((prev) => [res.data, ...prev]);
               } catch (err) {
                 console.error("Failed to duplicate quick note", err);
               }
@@ -1141,24 +1362,35 @@ export function LeftSidebar({
             <CopyPlus className="w-4 h-4" />
             Duplicate
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
-            onClick={async (e) => {
-              e.stopPropagation();
-              try {
-                const workspaceId = activeWorkspaceId ?? (await resolveWorkspaceId());
-                if (!workspaceId) return;
-                await api.patch(`/workspaces/${workspaceId}/item/quick-note/${noteId}`, { deletedAt: new Date() });
-                setQuickNotes((prev) => prev.filter(n => n.id !== noteId));
-                // If we are currently on this note, we could redirect, but let's keep it simple
-              } catch (err) {
-                console.error("Failed to move to trash", err);
-              }
-            }}
-          >
-            <Trash2 className="w-4 h-4" />
-            Move to trash
-          </DropdownMenuItem>
+          {canMoveToTrash && (
+            <DropdownMenuItem
+              className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-md flex items-center gap-2"
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const workspaceId =
+                    activeWorkspaceId ?? (await resolveWorkspaceId());
+                  if (!workspaceId) return;
+                  await api.patch(
+                    `/workspaces/${workspaceId}/item/quick-note/${noteId}`,
+                    {
+                      deletedAt: new Date().toISOString(),
+                    },
+                  );
+                  setQuickNotes((prev) =>
+                    prev.filter((note) => note.id !== noteId),
+                  );
+                  await fetchPinnedItems();
+                  window.dispatchEvent(new Event("hm:quick-notes-updated"));
+                } catch (err) {
+                  console.error("Failed to move quick note to trash", err);
+                }
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Move to trash
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -1182,19 +1414,22 @@ export function LeftSidebar({
           side="bottom"
           align="start"
           sideOffset={-10}
-          className="w-56 border-border bg-surface shadow-xl rounded-[8px] p-1.5 overflow-hidden z-[100]"
+          className="w-56 border-border bg-surface shadow-xl rounded-lg p-1.5 overflow-hidden z-100"
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
                 if (!activeWorkspaceId) return;
-                await api.patch(`/workspaces/${activeWorkspaceId}/item/${pageId}`, { isPinned: !isPinned });
+                await api.patch(
+                  `/workspaces/${activeWorkspaceId}/item/${pageId}`,
+                  { isPinned: !isPinned },
+                );
                 loadGlobalPages();
-                window.dispatchEvent(new Event('hm:global-pages-updated'));
-                window.dispatchEvent(new Event('hm:pinned-items-updated'));
+                window.dispatchEvent(new Event("hm:global-pages-updated"));
+                window.dispatchEvent(new Event("hm:pinned-items-updated"));
               } catch (err) {
                 console.error("Failed to pin page:", err);
               }
@@ -1205,34 +1440,38 @@ export function LeftSidebar({
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-border/50 my-1.5" />
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
-              navigator.clipboard.writeText(`${window.location.origin}/dashboard/pages`);
+              navigator.clipboard.writeText(
+                `${window.location.origin}/dashboard/pages`,
+              );
             }}
           >
             <Copy className="w-4 h-4" />
             Copy link
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={(e) => {
               e.stopPropagation();
-              window.open('/dashboard/pages', '_blank');
+              window.open("/dashboard/pages", "_blank");
             }}
           >
             <ExternalLink className="w-4 h-4" />
             Open in a new tab
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-muted-foreground focus:text-foreground focus:bg-muted rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
                 if (!activeWorkspaceId) return;
-                await api.post(`/workspaces/${activeWorkspaceId}/item/${pageId}/duplicate`);
+                await api.post(
+                  `/workspaces/${activeWorkspaceId}/item/${pageId}/duplicate`,
+                );
                 loadGlobalPages();
-                window.dispatchEvent(new Event('hm:global-pages-updated'));
+                window.dispatchEvent(new Event("hm:global-pages-updated"));
               } catch (err) {
                 console.error("Failed to duplicate page:", err);
               }
@@ -1242,23 +1481,28 @@ export function LeftSidebar({
             Duplicate
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-[6px] flex items-center gap-2"
+            className="cursor-pointer py-2 px-3 text-[13px] font-medium text-red-500/80 focus:text-red-500 focus:bg-red-500/10 rounded-md flex items-center gap-2"
             onClick={async (e) => {
               e.stopPropagation();
               try {
                 if (!activeWorkspaceId) return;
-                await api.patch(`/workspaces/${activeWorkspaceId}/item/${pageId}`, { deletedAt: new Date().toISOString() });
-                
-                if (localStorage.getItem('hm_global_selected_page') === pageId) {
-                  const activeKeys = globalPages.filter(p => p.id !== pageId);
+                await api.patch(
+                  `/workspaces/${activeWorkspaceId}/item/${pageId}`,
+                  { deletedAt: new Date().toISOString() },
+                );
+
+                if (
+                  localStorage.getItem("hm_global_selected_page") === pageId
+                ) {
+                  const activeKeys = globalPages.filter((p) => p.id !== pageId);
                   const firstKey = activeKeys[0]?.id;
                   if (firstKey) {
-                    localStorage.setItem('hm_global_selected_page', firstKey);
+                    localStorage.setItem("hm_global_selected_page", firstKey);
                   }
                 }
-                
+
                 loadGlobalPages();
-                window.dispatchEvent(new Event('hm:global-pages-updated'));
+                window.dispatchEvent(new Event("hm:global-pages-updated"));
               } catch (err) {
                 console.error("Failed to move page to trash:", err);
               }
@@ -1310,7 +1554,7 @@ export function LeftSidebar({
           <>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <div className="flex items-center ml-2 gap-1 flex-1 min-w-0 hover:bg-muted px-1.5 py-1 rounded-[6px] transition-colors cursor-pointer group/logo">
+                <div className="flex items-center ml-2 gap-1 flex-1 min-w-0 hover:bg-muted px-1.5 py-1 rounded-md transition-colors cursor-pointer group/logo">
                   <span className="text-[14px] font-medium truncate text-foreground">
                     {currentWorkspace?.name ?? `${userName}'s HypeMind`}
                   </span>
@@ -1319,7 +1563,7 @@ export function LeftSidebar({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="start"
-                className="w-[300px] border-border bg-surface shadow-xl rounded-[8px] p-0 overflow-hidden"
+                className="w-75 border-border bg-surface shadow-xl rounded-lg p-0 overflow-hidden"
               >
                 {/* Header Section */}
                 <div className="flex items-center gap-3 px-3 py-3">
@@ -1340,7 +1584,7 @@ export function LeftSidebar({
                   </div>
                 </div>
 
-                <div className="h-[1px] bg-border/50 w-full" />
+                <div className="h-px bg-border/50 w-full" />
 
                 {/* Email and Workspace Section */}
                 <div className="px-1 py-1.5 mt-1">
@@ -1356,7 +1600,7 @@ export function LeftSidebar({
                   {workspaces.map((workspace) => (
                     <DropdownMenuItem
                       key={workspace.id}
-                      className="cursor-pointer py-1.5 px-2 gap-3 focus:bg-muted focus:text-foreground rounded-[6px]"
+                      className="cursor-pointer py-1.5 px-2 gap-3 focus:bg-muted focus:text-foreground rounded-md"
                       onClick={() => switchWorkspace(workspace.id)}
                     >
                       <div className="w-5 h-5 rounded-[4px] bg-muted flex items-center justify-center text-foreground text-[11px] font-medium shrink-0 border border-border/50">
@@ -1403,13 +1647,13 @@ export function LeftSidebar({
                   </div>
                 </div>
 
-                <div className="h-[1px] bg-border/50 w-full" />
+                <div className="h-px bg-border/50 w-full" />
 
                 <div className="p-1 mb-1">
-                  <DropdownMenuItem className="cursor-pointer py-1.5 px-3 text-[13px] text-muted-foreground focus:text-foreground rounded-[6px]">
+                  <DropdownMenuItem className="cursor-pointer py-1.5 px-3 text-[13px] text-muted-foreground focus:text-foreground rounded-md">
                     Add another account
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer py-1.5 px-3 text-[13px] text-muted-foreground focus:text-foreground rounded-[6px]">
+                  <DropdownMenuItem className="cursor-pointer py-1.5 px-3 text-[13px] text-muted-foreground focus:text-foreground rounded-md">
                     Log out
                   </DropdownMenuItem>
                 </div>
@@ -1499,34 +1743,46 @@ export function LeftSidebar({
               </div>
               {expanded["pinned"] && (
                 <div className="mt-1 space-y-0.5 max-h-[40vh] overflow-y-auto scrollbar-thin">
-                  {pinnedItems.areas.length === 0 && pinnedItems.projects.length === 0 && pinnedItems.items.length === 0 ? (
+                  {pinnedItems.areas.length === 0 &&
+                  pinnedItems.projects.length === 0 &&
+                  pinnedItems.items.length === 0 ? (
                     <div className="text-[13px] text-muted-foreground px-8 py-1">
                       No pinned items.
                     </div>
                   ) : (
                     <>
-                      {pinnedItems.areas.map(area => (
+                      {pinnedItems.areas.map((area) => (
                         <SidebarItem
                           key={area.id}
                           icon={Folder}
                           label={area.title}
                           href={`/dashboard/area/${area.id}?pinned_id=${area.id}`}
-                          active={isRouteActive(pathname, `/dashboard/area/${area.id}`) && searchParams.get('pinned_id') === area.id}
+                          active={
+                            isRouteActive(
+                              pathname,
+                              `/dashboard/area/${area.id}`,
+                            ) && searchParams.get("pinned_id") === area.id
+                          }
                           level={1}
                         />
                       ))}
-                      {pinnedItems.projects.map(project => (
+                      {pinnedItems.projects.map((project) => (
                         <SidebarItem
                           key={project.id}
                           icon={Folder}
                           label={project.title}
                           href={`/dashboard/project/${project.id}?pinned_id=${project.id}`}
-                          active={isRouteActive(pathname, `/dashboard/project/${project.id}`) && searchParams.get('pinned_id') === project.id}
+                          active={
+                            isRouteActive(
+                              pathname,
+                              `/dashboard/project/${project.id}`,
+                            ) && searchParams.get("pinned_id") === project.id
+                          }
                           level={1}
                           rightElement={renderProjectOptions(project.id, true)}
                         />
                       ))}
-                      {pinnedItems.items.map(item => {
+                      {pinnedItems.items.map((item) => {
                         let href = "";
                         let onClick = undefined;
                         let icon = FileText;
@@ -1535,35 +1791,75 @@ export function LeftSidebar({
                         if (item.type === "QUICK_NOTE") {
                           href = `/dashboard/quick-note?id=${item.id}&pinned_id=${item.id}`;
                           icon = FilePenLine;
-                          active = pathname.includes("/dashboard/quick-note") && searchParams.get("id") === item.id && searchParams.get("pinned_id") === item.id;
+                          active =
+                            pathname.includes("/dashboard/quick-note") &&
+                            searchParams.get("id") === item.id &&
+                            searchParams.get("pinned_id") === item.id;
                         } else if (item.projectId) {
                           href = `/dashboard/project/${item.projectId}?pinned_id=${item.id}`;
                           if (item.type === "PAGE") {
-                              active = pathname.includes(`/dashboard/project/${item.projectId}`) && searchParams.get('pinned_id') === item.id;
-                              onClick = (e: React.MouseEvent) => {
-                                  localStorage.setItem(`hm_project_${item.projectId}_page`, item.id);
-                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_mode`, 'pages');
-                                  window.dispatchEvent(new Event('hm:force-sidebar-collapse'));
-                                  window.dispatchEvent(new Event('hm:project-item-selected'));
-                              };
+                            active =
+                              pathname.includes(
+                                `/dashboard/project/${item.projectId}`,
+                              ) && searchParams.get("pinned_id") === item.id;
+                            onClick = () => {
+                              localStorage.setItem(
+                                `hm_project_${item.projectId}_page`,
+                                item.id,
+                              );
+                              localStorage.setItem(
+                                `hm_project_${item.projectId}_sidebar_mode`,
+                                "pages",
+                              );
+                              window.dispatchEvent(
+                                new Event("hm:force-sidebar-collapse"),
+                              );
+                              window.dispatchEvent(
+                                new Event("hm:project-item-selected"),
+                              );
+                            };
                           } else {
-                              active = pathname.includes(`/dashboard/project/${item.projectId}`) && searchParams.get('pinned_id') === item.id;
-                              onClick = (e: React.MouseEvent) => {
-                                  localStorage.setItem(`hm_project_${item.projectId}_resource`, item.id);
-                                  localStorage.setItem(`hm_project_${item.projectId}_sidebar_mode`, 'resources');
-                                  window.dispatchEvent(new Event('hm:force-sidebar-collapse'));
-                                  window.dispatchEvent(new Event('hm:project-item-selected'));
-                              };
+                            active =
+                              pathname.includes(
+                                `/dashboard/project/${item.projectId}`,
+                              ) && searchParams.get("pinned_id") === item.id;
+                            onClick = () => {
+                              localStorage.setItem(
+                                `hm_project_${item.projectId}_resource`,
+                                item.id,
+                              );
+                              localStorage.setItem(
+                                `hm_project_${item.projectId}_sidebar_mode`,
+                                "resources",
+                              );
+                              window.dispatchEvent(
+                                new Event("hm:force-sidebar-collapse"),
+                              );
+                              window.dispatchEvent(
+                                new Event("hm:project-item-selected"),
+                              );
+                            };
                           }
                         } else {
                           href = `/dashboard/pages?pinned_id=${item.id}`;
-                          active = pathname === "/dashboard/pages" && searchParams.get('pinned_id') === item.id;
-                          onClick = (e: React.MouseEvent) => {
-                              localStorage.setItem('hm_global_selected_page', item.id);
-                              window.dispatchEvent(new Event('hm:force-sidebar-collapse'));
-                              window.dispatchEvent(new Event('hm:global-page-selected'));
-                              window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
-                              setSelectedGlobalPageId(item.id);
+                          active =
+                            pathname === "/dashboard/pages" &&
+                            searchParams.get("pinned_id") === item.id;
+                          onClick = () => {
+                            localStorage.setItem(
+                              "hm_global_selected_page",
+                              item.id,
+                            );
+                            window.dispatchEvent(
+                              new Event("hm:force-sidebar-collapse"),
+                            );
+                            window.dispatchEvent(
+                              new Event("hm:global-page-selected"),
+                            );
+                            window.dispatchEvent(
+                              new Event("hm:global-pages-sidebar-toggled"),
+                            );
+                            setSelectedGlobalPageId(item.id);
                           };
                         }
 
@@ -1576,7 +1872,11 @@ export function LeftSidebar({
                             onClick={onClick}
                             active={active}
                             level={1}
-                            rightElement={renderGlobalPageOptions(item.id, true)}
+                            rightElement={
+                              item.type === "QUICK_NOTE"
+                                ? renderQuickNoteOptions(item.id, false)
+                                : renderGlobalPageOptions(item.id, true)
+                            }
                           />
                         );
                       })}
@@ -1604,7 +1904,11 @@ export function LeftSidebar({
               onClick={() => toggle("quickNote")}
             >
               <div className="flex items-center gap-0 flex-1 min-w-0">
-                <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
+                <div
+                  className="w-5 flex shrink-0 items-center
+                 justify-start text-muted-foreground 
+                 group-hover:text-foreground transition-colors duration-75"
+                >
                   <FilePenLine className="w-3.5 h-3.5" />
                 </div>
                 <span className="text-[13px] font-medium transition-colors duration-75 leading-5 flex-1 truncate">
@@ -1622,7 +1926,8 @@ export function LeftSidebar({
                     <ChevronRight className="w-3.5 h-3.5" />
                   </div>
                 </div>
-                <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-75">
+                <div className="flex items-center gap-0.5 ml-1 
+                opacity-0 group-hover:opacity-100 transition-opacity duration-75">
                   <div className="relative group/tooltip flex items-center">
                     <button
                       type="button"
@@ -1639,11 +1944,19 @@ export function LeftSidebar({
                         <Plus className="w-3.5 h-3.5" />
                       )}
                     </button>
-                    <div className="absolute top-[120%] right-0 opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity duration-200 z-[100] flex items-center gap-2 whitespace-nowrap bg-foreground text-background px-2.5 py-1.5 rounded-md shadow-lg border border-border/10">
+                    <div className="absolute top-[120%] right-0 
+                    opacity-0 group-hover/tooltip:opacity-100 
+                    pointer-events-none transition-opacity 
+                    duration-200 z-100 flex items-center 
+                    gap-2 whitespace-nowrap bg-foreground 
+                    text-background px-2.5 py-1.5 rounded-md 
+                    shadow-lg border border-border/10">
                       <span className="text-[12px] font-medium">
                         New Quick Note
                       </span>
-                      <kbd className="text-[10px] font-sans bg-background/20 text-background px-1.5 py-0.5 rounded border border-background/20">
+                      <kbd className="text-[10px] font-sans
+                       bg-background/20 text-background px-1.5 
+                       py-0.5 rounded border border-background/20">
                         N
                       </kbd>
                     </div>
@@ -1696,7 +2009,7 @@ export function LeftSidebar({
                 onClick={() => toggle("pages")}
               >
                 <div className="w-5 flex shrink-0 items-center justify-start text-muted-foreground group-hover:text-foreground transition-colors duration-75">
-                    <FileText className="w-3.5 h-3.5" />
+                  <FileText className="w-3.5 h-3.5" />
                 </div>
                 <span className="text-[13px] font-medium text-muted-foreground group-hover:text-foreground transition-colors duration-75 leading-5 flex-1 truncate">
                   Pages
@@ -1734,26 +2047,49 @@ export function LeftSidebar({
                       icon={FileText}
                       label={page.title}
                       href={`/dashboard/pages`}
-                      active={pathname === "/dashboard/pages" && selectedGlobalPageId === page.id && !searchParams.get('pinned_id')}
+                      active={
+                        pathname === "/dashboard/pages" &&
+                        selectedGlobalPageId === page.id &&
+                        !searchParams.get("pinned_id")
+                      }
                       level={1}
                       onClick={() => {
-                          localStorage.setItem('hm_global_selected_page', page.id);
-                          window.dispatchEvent(new Event('hm:global-page-selected'));
-                          setSelectedGlobalPageId(page.id);
+                        localStorage.setItem(
+                          "hm_global_selected_page",
+                          page.id,
+                        );
+                        window.dispatchEvent(
+                          new Event("hm:global-page-selected"),
+                        );
+                        setSelectedGlobalPageId(page.id);
                       }}
-                      rightElement={renderGlobalPageOptions(page.id, !!page.isPinned)}
+                      rightElement={renderGlobalPageOptions(
+                        page.id,
+                        !!page.isPinned,
+                      )}
                     />
                   ))}
                 </div>
                 <div className="shrink-0 mt-0.5">
                   <SidebarItem
-                    label={isGlobalPagesListCollapsed ? "Show All Pages →" : "Hide All Pages"}
+                    label={
+                      isGlobalPagesListCollapsed
+                        ? "Show All Pages →"
+                        : "Hide All Pages"
+                    }
                     href={`/dashboard/pages`}
                     level={1}
                     onClick={() => {
-                        const newState = isGlobalPagesListCollapsed ? 'false' : 'true';
-                        localStorage.setItem('hm_global_pages_sidebar_collapsed', newState);
-                        window.dispatchEvent(new Event('hm:global-pages-sidebar-toggled'));
+                      const newState = isGlobalPagesListCollapsed
+                        ? "false"
+                        : "true";
+                      localStorage.setItem(
+                        "hm_global_pages_sidebar_collapsed",
+                        newState,
+                      );
+                      window.dispatchEvent(
+                        new Event("hm:global-pages-sidebar-toggled"),
+                      );
                     }}
                   />
                 </div>
@@ -1820,10 +2156,12 @@ export function LeftSidebar({
                       label={project.title}
                       level={1}
                       href={Navigator.project(project.id)}
-                      active={isRouteActive(
-                        pathname,
-                        Navigator.project(project.id),
-                      ) && !searchParams.get('pinned_id')}
+                      active={
+                        isRouteActive(
+                          pathname,
+                          Navigator.project(project.id),
+                        ) && !searchParams.get("pinned_id")
+                      }
                       rightElement={renderProjectOptions(project.id, false)}
                     />
                   ))}
@@ -1905,11 +2243,14 @@ export function LeftSidebar({
                           </div>
                         </div>
                       </div>
-                      
+
                       {openAreas[area.id] && (
                         <div className="mt-0.5 space-y-0.5">
                           {area.projects.length === 0 && (
-                            <div className="px-8 py-1 text-[12px] text-muted-foreground" style={{ paddingLeft: `${8 + 2 * 16}px` }}>
+                            <div
+                              className="px-8 py-1 text-[12px] text-muted-foreground"
+                              style={{ paddingLeft: `${8 + 2 * 16}px` }}
+                            >
                               No projects in this area.
                             </div>
                           )}
@@ -1919,8 +2260,16 @@ export function LeftSidebar({
                               label={project.title}
                               level={2}
                               href={Navigator.project(project.id)}
-                              active={isRouteActive(pathname, Navigator.project(project.id)) && !searchParams.get('pinned_id')}
-                              rightElement={renderProjectOptions(project.id, false)}
+                              active={
+                                isRouteActive(
+                                  pathname,
+                                  Navigator.project(project.id),
+                                ) && !searchParams.get("pinned_id")
+                              }
+                              rightElement={renderProjectOptions(
+                                project.id,
+                                false,
+                              )}
                             />
                           ))}
                         </div>
@@ -1973,10 +2322,22 @@ export function LeftSidebar({
       <AreaProjectAssignmentPopover
         isOpen={isAreaProjectPopoverOpen}
         onClose={() => setIsAreaProjectPopoverOpen(false)}
-        projects={Array.from(new Map([...projects, ...areas.flatMap((a) => a.projects)].map(p => [p.id, p])).values())}
+        projects={Array.from(
+          new Map(
+            [...projects, ...areas.flatMap((a) => a.projects)].map((p) => [
+              p.id,
+              p,
+            ]),
+          ).values(),
+        )}
         onAssign={handleAssignProjectToArea}
         onCreateAndAssign={(title, description, tags) => {
-          handleNewProjectSubmit({ title, description, tags, areaId: activeAreaIdForProject });
+          handleNewProjectSubmit({
+            title,
+            description,
+            tags,
+            areaId: activeAreaIdForProject,
+          });
           setIsAreaProjectPopoverOpen(false);
         }}
       />

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { setAccessToken } from "../../lib/api";
+import { setAccessToken } from "../../../lib/api";
 import { storeWorkspaceId } from "../../providers/auth-provider";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
@@ -59,9 +59,10 @@ function VerifyEmailContent() {
 				setTimeout(() => {
 					window.location.assign("/dashboard");
 				}, 3000);
-			} catch (err: any) {
+			} catch (err: unknown) {
 				setStatus("error");
-				setMessage(err.message || "Verification failed. The link may have expired.");
+				const message = err instanceof Error ? err.message : "Verification failed. The link may have expired.";
+				setMessage(message);
 			}
 		})();
 	}, [token, router]);
@@ -152,7 +153,7 @@ function VerifyEmailContent() {
 
 					{resendSuccess ? (
 						<Alert variant="success" className="mb-4 text-left">
-							If an account with that email exists, we've sent a verification link.
+							If an account with that email exists, we&apos;ve sent a verification link.
 						</Alert>
 					) : (
 						<div className="space-y-3">

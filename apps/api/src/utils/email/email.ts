@@ -58,7 +58,7 @@ export const sendPasswordResetEmail = async (rawToken: string, email: string) =>
 	const url = `${CLIENT_URL}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
 	await resend.emails.send({
-		from: process.env.RESEND_PASSWORD_RESET_ID!,
+		from: RESEND_PASSWORD_RESET_ID,
 		to: email,
 		subject: "Password reset instructions",
 		react: PasswordReset({ url }),

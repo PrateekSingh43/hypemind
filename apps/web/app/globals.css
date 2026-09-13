@@ -155,11 +155,26 @@
 .tiptap ul[data-type="taskList"] {
 	list-style: none;
 	padding: 0;
+	margin: 0.3em 0;
 }
 
 .tiptap ul[data-type="taskList"] li {
 	display: flex;
 	align-items: flex-start;
+	gap: 8px;
+}
+
+.tiptap ul[data-type="taskList"] li label {
+	flex-shrink: 0;
+	margin-top: 3px;
+}
+
+.tiptap ul[data-type="taskList"] li label input[type="checkbox"] {
+	appearance: none;
+	width: 16px;
+	height: 16px;
+	border: 1.5px solid hsl(var(--muted-foreground));
+	border-radius: 3px;
 	gap: 8px;
 }
 
@@ -180,8 +195,8 @@
 }
 
 .tiptap ul[data-type="taskList"] li label input[type="checkbox"]:checked {
-	background: hsl(var(--primary));
-	border-color: hsl(var(--primary));
+	background: #f5f5f6;
+	border-color: #f5f5f6;
 }
 
 .tiptap ul[data-type="taskList"] li label input[type="checkbox"]:checked::after {
@@ -189,54 +204,62 @@
 	position: absolute;
 	top: -1px;
 	left: 2px;
-	color: hsl(var(--primary-foreground));
+	color: #111214;
 	font-size: 11px;
 	font-weight: 700;
 }
 
-.tiptap ul[data-type="taskList"] li[data-checked="true"]>div>p {
+.tiptap ul[data-type="taskList"] li[data-checked="true"] p {
 	text-decoration: line-through;
-	color: hsl(var(--muted-foreground));
+	color: #7f858f;
 }
 
 .tiptap blockquote {
-	border-left: 3px solid hsl(var(--primary));
-	padding-left: 16px;
+	border-left: 3px solid #4f535c;
+	padding-left: 14px;
 	margin-left: 0;
-	color: hsl(var(--muted-foreground));
-	font-style: italic;
+	color: #b4b8c1;
+	font-style: normal;
 }
 
 .tiptap hr {
 	border: none;
-	border-top: 1px solid hsl(var(--border));
+	border-top: 1px solid #303238;
 	margin: 24px 0;
 }
 
 .tiptap h1,
 .tiptap h2,
-.tiptap h3 {
-	color: hsl(var(--foreground));
+.tiptap h3,
+.tiptap h4 {
+	color: #f4f4f5;
 	font-weight: 600;
-	line-height: 1.3;
+	line-height: 1.22;
+	letter-spacing: 0;
 }
 
 .tiptap h1 {
-	font-size: 1.5em;
-	margin-top: 1.5em;
-	margin-bottom: 0.5em;
+	font-size: 32px;
+	margin-top: 1.2em;
+	margin-bottom: 0.28em;
 }
 
 .tiptap h2 {
-	font-size: 1.25em;
-	margin-top: 1.3em;
-	margin-bottom: 0.4em;
+	font-size: 24px;
+	margin-top: 1.15em;
+	margin-bottom: 0.25em;
 }
 
 .tiptap h3 {
-	font-size: 1.1em;
-	margin-top: 1.2em;
-	margin-bottom: 0.3em;
+	font-size: 20px;
+	margin-top: 1em;
+	margin-bottom: 0.2em;
+}
+
+.tiptap h4 {
+	font-size: 16px;
+	margin-top: 0.9em;
+	margin-bottom: 0.15em;
 }
 
 .tiptap a {
@@ -247,6 +270,737 @@
 
 .tiptap a:hover {
 	text-decoration: underline;
+}
+
+.tiptap ul:not([data-type="taskList"]),
+.hym-document ul:not([data-type="taskList"]) {
+	margin: 0.3em 0;
+	padding-left: 1.45em;
+	list-style-type: disc;
+}
+
+.tiptap ol,
+.hym-document ol {
+	margin: 0.3em 0;
+	padding-left: 1.45em;
+	list-style-type: decimal;
+}
+
+.tiptap li {
+	margin: 0.12em 0;
+	padding-left: 0.1em;
+}
+
+.tiptap li p {
+	margin: 0;
+}
+
+.tiptap mark,
+.hym-document mark {
+	border-radius: 3px;
+	background-color: rgba(234, 179, 8, 0.18);
+	color: inherit;
+	padding: 0.02em 0.12em;
+}
+
+.tiptap code:not(pre code),
+.hym-document code:not(pre code) {
+	border: 1px solid #303238;
+	border-radius: 4px;
+	background: #191a1d;
+	color: #f2d38b;
+	padding: 0.08em 0.28em;
+	font-size: 0.92em;
+}
+
+/* ------------------------------------------------------------------ */
+/* HypeMind Pages editor                                               */
+/* ------------------------------------------------------------------ */
+
+.hym-page-shell {
+	min-height: 100%;
+}
+
+.hym-document {
+	color: #e6e7ea;
+	font-size: 16px;
+	line-height: 24px;
+	caret-color: #f5f5f6;
+	min-height: 120px;
+}
+
+/* Every top-level block is a positioning target for hover controls.
+   The block itself is the interaction region (Notion model): subtle
+   hover tint, coherent active state — always full content height. */
+.hym-document>* {
+	position: relative;
+	border-radius: 4px;
+	transition: background-color 100ms ease;
+}
+
+.hym-document>*:hover {
+	background: rgba(255, 255, 255, 0.025);
+}
+
+.hym-document>[data-active-block] {
+	background: rgba(94, 106, 210, 0.09);
+	box-shadow: inset 0 0 0 1px rgba(94, 106, 210, 0.25);
+}
+
+/* Compact default text block: 16/24 with a small interaction height.
+   Top-level only — list/callout inner paragraphs stay tight. */
+.hym-document>p {
+	min-height: 38px;
+	margin: 0;
+	padding: 1px 2px;
+}
+
+.hym-document>*+* {
+	margin-top: 2px;
+}
+
+/* Trailing empty paragraph (endless-surface affordance) stays quiet. */
+.hym-document>p.is-empty:not(:focus-within) {
+	min-height: 20px;
+}
+
+.hym-document h1 {
+	font-size: 30px;
+	line-height: 1.25;
+	margin: 22px 0 4px;
+	letter-spacing: -0.01em;
+}
+
+.hym-document h2 {
+	font-size: 23px;
+	line-height: 1.3;
+	margin: 20px 0 3px;
+	letter-spacing: -0.01em;
+}
+
+.hym-document h3 {
+	font-size: 19px;
+	line-height: 1.35;
+	margin: 18px 0 2px;
+}
+
+.hym-document h1+h2,
+.hym-document h2+h3,
+.hym-document h1+h3,
+.hym-document>*:first-child {
+	margin-top: 0;
+}
+
+.hym-document h1.is-empty::before,
+.hym-document h2.is-empty::before,
+.hym-document h3.is-empty::before,
+.hym-document p.is-empty::before,
+.hym-document li p.is-empty::before {
+	content: attr(data-placeholder);
+	float: left;
+	height: 0;
+	color: #565a63;
+	pointer-events: none;
+}
+
+.hym-editor .ProseMirror-selectednode {
+	outline: none;
+	background-color: rgba(94, 106, 210, 0.08);
+	border-radius: 4px;
+}
+
+.hym-editor ::selection {
+	background: rgba(94, 106, 210, 0.35);
+}
+
+/* Block hover controls (rendered by Tiptap DragHandle) */
+.hym-block-controls {
+	z-index: 30;
+	pointer-events: auto;
+	user-select: none;
+}
+
+.hym-control-btn {
+	display: inline-flex;
+	width: 24px;
+	height: 24px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 5px;
+	color: #6f7480;
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	transition: color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+
+.hym-control-btn:hover {
+	color: #eeeeee;
+	background: #2b2c30;
+}
+
+.hym-control-btn:focus-visible {
+	outline: 2px solid rgba(94, 106, 210, 0.7);
+	outline-offset: 2px;
+}
+
+.hym-drag-grip {
+	cursor: grab;
+	touch-action: none;
+}
+
+.hym-drag-grip:active {
+	cursor: grabbing;
+}
+
+/* ------------------------------------------------------------------ */
+/* Block command menus ("/" and "+") and the block action menu          */
+/* ------------------------------------------------------------------ */
+
+.hym-command-menu,
+.hym-action-menu {
+	z-index: 60;
+	overflow-y: auto;
+	border: 1px solid #27282b;
+	border-radius: 10px;
+	background: #151618;
+	padding: 6px;
+	box-shadow:
+		0 16px 40px -12px rgba(0, 0, 0, 0.55),
+		0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.hym-menu-category {
+	padding: 8px 8px 4px;
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: #565a63;
+	user-select: none;
+}
+
+/* Slash-mode query mirror + plus-mode filter input */
+.hym-menu-query {
+	padding: 7px 10px;
+	margin-bottom: 4px;
+	border-bottom: 1px solid #27282b;
+	font-size: 12px;
+	color: #8a8f98;
+}
+
+.hym-menu-query-term {
+	color: #eeeeee;
+	font-weight: 500;
+}
+
+.hym-menu-filter {
+	width: 100%;
+	background: #0e0f11;
+	border: 1px solid #27282b;
+	border-radius: 6px;
+	padding: 6px 10px;
+	font-size: 12px;
+	color: #eeeeee;
+	outline: none;
+	transition: border-color 100ms ease;
+}
+
+.hym-menu-filter::placeholder {
+	color: #565a63;
+}
+
+.hym-menu-filter:focus {
+	border-color: #42444a;
+}
+
+.hym-menu-divider {
+	height: 1px;
+	margin: 6px 4px;
+	background: #27282b;
+}
+
+.hym-menu-item {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 10px;
+	border: none;
+	background: transparent;
+	border-radius: 6px;
+	padding: 6px 8px;
+	text-align: left;
+	cursor: pointer;
+	color: inherit;
+	transition: background-color 90ms ease;
+}
+
+.hym-menu-item:hover,
+.hym-menu-item.is-active {
+	background: #26272b;
+}
+
+.hym-menu-item:focus-visible {
+	outline: 2px solid rgba(94, 106, 210, 0.7);
+	outline-offset: -2px;
+}
+
+.hym-menu-item-icon {
+	display: inline-flex;
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid #27282b;
+	border-radius: 6px;
+	background: #0e0f11;
+	color: #a0a5b0;
+}
+
+.hym-menu-item-icon svg {
+	width: 15px;
+	height: 15px;
+}
+
+.hym-menu-item-text {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.hym-menu-item-label {
+	font-size: 13px;
+	font-weight: 500;
+	color: #eeeeee;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hym-menu-item-desc {
+	font-size: 11px;
+	color: #565a63;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hym-menu-item.is-danger .hym-menu-item-label,
+.hym-menu-item.is-danger .hym-menu-item-icon {
+	color: #f87171;
+}
+
+.hym-menu-item.is-danger:hover,
+.hym-menu-item.is-danger.is-active {
+	background: rgba(248, 113, 113, 0.08);
+}
+
+/* Transient save pill */
+.hym-save-indicator {
+	background: rgba(21, 22, 24, 0.85);
+	border-color: #27282b;
+	box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.5);
+}
+
+/* Drop indicator: rendered ONLY while a block drag is in flight
+   (the plugin mounts the widget solely when it has a drop target).
+   Slim accent line with an origin dot, between blocks. */
+.hym-drop-indicator {
+	position: absolute;
+	left: -12px;
+	right: -12px;
+	height: 2px;
+	border-radius: 1px;
+	background: #5e6ad2;
+	pointer-events: none;
+	z-index: 25;
+}
+
+.hym-drop-indicator::before {
+	content: "";
+	position: absolute;
+	left: -4px;
+	top: -3px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #5e6ad2;
+}
+
+/* Code block chrome (language picker + copy) */
+.hym-code-block {
+	position: relative;
+	margin: 0.85em 0;
+	overflow: visible;
+	border: 1px solid #303238;
+	border-radius: 8px;
+	background: #151618;
+}
+
+.hym-code-block .hym-code-pre {
+	margin: 0;
+	padding: 40px 16px 14px;
+	overflow-x: auto;
+	background: transparent;
+}
+
+.hym-code-block code {
+	display: block;
+	min-height: 1.6em;
+	outline: none;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.6;
+	color: #e6e7ea;
+	white-space: pre;
+}
+
+.hym-code-toolbar {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.hym-code-block:hover .hym-code-toolbar,
+.hym-code-block:focus-within .hym-code-toolbar {
+	opacity: 1;
+}
+
+.hym-code-language,
+.hym-code-copy {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 26px;
+	border: 1px solid #303238;
+	border-radius: 5px;
+	background: #191a1d;
+	color: #a0a5b0;
+	font-size: 12px;
+	outline: none;
+	cursor: pointer;
+}
+
+.hym-code-language {
+	padding: 0 8px;
+	font-family: var(--font-mono);
+}
+
+.hym-code-copy {
+	width: 26px;
+	justify-content: center;
+}
+
+.hym-code-language:focus-visible,
+.hym-code-copy:focus-visible {
+	border-color: rgba(94, 106, 210, 0.7);
+	box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.18);
+}
+
+/* Callout block */
+.hym-callout {	display: flex;
+	gap: 12px;
+	margin: 0.75em 0;
+	padding: 12px 14px;
+	border: 1px solid #27282b;
+	border-radius: 8px;
+	background: rgba(38, 39, 43, 0.5);
+}
+
+.hym-callout-icon {
+	margin-top: 2px;
+	user-select: none;
+	font-size: 18px;
+	line-height: 1;
+	background: transparent;
+	border: none;
+	padding: 2px;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 120ms ease;
+}
+
+.hym-callout-icon:hover {
+	background: #2b2c30;
+}
+
+.hym-callout-icon:focus-visible {
+	outline: 2px solid rgba(94, 106, 210, 0.7);
+	outline-offset: 1px;
+}
+
+.hym-callout-content {
+	min-width: 0;
+	flex: 1;
+}
+
+.hym-callout-content p {
+	margin: 0;
+}
+
+/* Toggle blocks (toggle list + toggle headings 1–4) */
+.hym-toggle {
+	margin: 0.5em 0;
+	padding: 1px 2px;
+	border-radius: 4px;
+}
+
+.hym-toggle-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 2px;
+}
+
+.hym-toggle-chevron {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	margin-top: 8px;
+	color: #8a8f98;
+	background: transparent;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: transform 120ms ease, background-color 120ms ease,
+		color 120ms ease;
+}
+
+.hym-toggle-chevron:hover {
+	color: #eeeeee;
+	background: #2b2c30;
+}
+
+.hym-toggle-chevron:focus-visible {
+	outline: 2px solid rgba(94, 106, 210, 0.7);
+	outline-offset: 1px;
+}
+
+.hym-toggle-chevron svg {
+	width: 11px;
+	height: 11px;
+}
+
+/* Collapsed state: chevron points right; open rotates it down. */
+.hym-toggle:not(.hym-open) > [data-type="toggle-content"] {
+	display: none;
+}
+
+.hym-toggle.hym-open > .hym-toggle-head .hym-toggle-chevron {
+	transform: rotate(90deg);
+}
+
+.hym-toggle-title {
+	flex: 1;
+	min-width: 0;
+	font-weight: 500;
+	outline: none;
+}
+
+/* Level typography mirrors the document heading scale. */
+.hym-toggle[data-level="0"] .hym-toggle-title {
+	font-size: 16px;
+	line-height: 1.55;
+}
+
+.hym-toggle[data-level="1"] .hym-toggle-title {
+	font-size: 30px;
+	line-height: 1.25;
+	letter-spacing: -0.01em;
+	font-weight: 600;
+}
+
+.hym-toggle[data-level="2"] .hym-toggle-title {
+	font-size: 23px;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+	font-weight: 600;
+}
+
+.hym-toggle[data-level="3"] .hym-toggle-title {
+	font-size: 19px;
+	line-height: 1.35;
+	font-weight: 600;
+}
+
+.hym-toggle[data-level="4"] .hym-toggle-title {
+	font-size: 16px;
+	line-height: 1.45;
+	font-weight: 600;
+}
+
+/* Keep the arrow vertically centered on the title's first line. */
+.hym-toggle[data-level="1"] .hym-toggle-chevron { margin-top: 9px; }
+.hym-toggle[data-level="2"] .hym-toggle-chevron { margin-top: 6px; }
+.hym-toggle[data-level="3"] .hym-toggle-chevron { margin-top: 3px; }
+.hym-toggle[data-level="4"] .hym-toggle-chevron { margin-top: 1px; }
+
+.hym-toggle-content {
+	padding-left: 24px;
+	min-width: 0;
+}
+
+.hym-toggle-content > :first-child { margin-top: 2px; }
+
+/* Empty-title placeholder (same treatment as headings/paragraphs). */
+.hym-document [data-type="toggle-title"].is-empty::before,
+.hym-toggle .hym-toggle-title.is-empty::before {
+	content: attr(data-placeholder);
+	float: left;
+	height: 0;
+	color: #565a63;
+	pointer-events: none;
+}
+
+/* Image block */
+.hym-image-frame {
+	margin: 0.85em 0;
+}
+
+.hym-image-frame.is-selected .hym-image,
+figure[data-selected] .hym-image {
+	box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.45);
+}
+
+.hym-image {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	border-radius: 8px;
+	border: 1px solid #303238;
+}
+
+.hym-image-placeholder {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0.85em 0;
+	padding: 12px 14px;
+	border: 1px dashed #36383f;
+	border-radius: 8px;
+	background: rgba(21, 22, 24, 0.6);
+	transition: border-color 120ms ease;
+}
+
+.hym-image-placeholder:focus-within {
+	border-color: #5e6ad2;
+}
+
+.hym-image-url-input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: none;
+	outline: none;
+	font-size: 13px;
+	color: #e6e7ea;
+}
+
+.hym-image-url-input::placeholder {
+	color: #565a63;
+}
+
+.hym-image-error {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px;
+	border: 1px solid rgba(248, 113, 113, 0.3);
+	border-radius: 8px;
+	background: rgba(127, 29, 29, 0.15);
+	color: #fca5a5;
+	font-size: 13px;
+}
+
+/* Contextual UI entrance — communicates appearance, never decoration */
+@keyframes hym-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.hym-fade-in {
+	animation: hym-fade-in 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Loading state: stable skeleton that avoids layout flash */
+.hym-editor-loading {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding-top: 8px;
+}
+
+.hym-skeleton-line {
+	height: 14px;
+	border-radius: 6px;
+	background: linear-gradient(
+		90deg,
+		#1a1b1e 25%,
+		#232428 50%,
+		#1a1b1e 75%
+	);
+	background-size: 200% 100%;
+	animation: hym-skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes hym-skeleton-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hym-fade-in,
+	.hym-control-btn,
+	.hym-block-controls,
+	.hym-callout-icon,
+	.hym-image-placeholder {
+		animation: none;
+		transition: none;
+	}
+
+	.hym-skeleton-line {
+		animation: none;
+	}
+}
+
+/* Mobile: controls cannot assume a left gutter; block actions follow
+   the caret instead of relying on hover. */
+@media (hover: none) {
+	.hym-block-controls {
+		display: none;
+	}
+}
+
+.hym-touch-controls {
+	position: fixed;
+	z-index: 30;
+	display: none;
+}
+
+@media (hover: none) {
+	.hym-touch-controls {
+		display: block;
+	}
 }
 
 /* Quick Note Editor Styles */
@@ -358,26 +1112,3 @@
 	animation: search-modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Notion-style Editor Block Handles */
-.drag-handle {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
-	border-radius: 4px;
-	background-color: transparent;
-	color: #8A8F98;
-	cursor: grab;
-	transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.drag-handle:hover {
-	background-color: #26272B;
-	color: #EEEEEE;
-}
-
-.drag-handle svg {
-	width: 16px;
-	height: 16px;
-}

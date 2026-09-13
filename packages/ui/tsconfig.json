@@ -5,8 +5,7 @@
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "module": "ESNext",
     "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": {
+        "paths": {
       "@repo/ui/*": ["./src/*"]
     }
   },

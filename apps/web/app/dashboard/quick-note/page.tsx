@@ -9,20 +9,12 @@ import React, {
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  List,
-  ListOrdered,
-  Tag,
   FolderGit2,
   FileOutput,
   FileText,
   FilePenLine,
   CheckCircle,
   Loader2,
-  Highlighter,
-  Search,
   ChevronRight,
   Pin,
   Copy,
@@ -38,12 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
 import { formatTimeAgo } from "../../../lib/format-time";
-import { useEditor, EditorContent } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
-import UnderlineExtension from "@tiptap/extension-underline";
-import HighlightExtension from "@tiptap/extension-highlight";
-import Placeholder from "@tiptap/extension-placeholder";
 import { api, resolveWorkspaceId } from "../../../lib/api";
 import { Navigator } from "../../../lib/navigator";
 import { QuickNoteEditor, EMPTY_DOC, textToDocument, isTiptapDoc } from "../../../components/dashboard/quick-note-editor";

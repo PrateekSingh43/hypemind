@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   FileText, Link as LinkIcon, Layout, Book, FolderGit2, Tag,
   CheckCircle, ChevronRight, Search, Filter, X, PanelLeftClose, PanelLeft, Video,
-  ExternalLink, Info, FilePlus, FilePenLine, Copy, CopyPlus, Trash2, List
+   FilePlus, FilePenLine, Copy, CopyPlus, Trash2, List
 } from 'lucide-react';
 import { Navigator } from '../../../lib/navigator';
 import { ItemContentView } from '../../../components/dashboard/item-content-view';
@@ -135,7 +135,7 @@ export default function InboxPage() {
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
 
   const selectedItem = items.find(i => i.id === selectedId);
-  const projectInputRef = useRef<HTMLInputElement>(null);
+  // const projectInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
 
   const toggleListPanel = () => {
@@ -276,7 +276,7 @@ export default function InboxPage() {
   };
 
   const filteredTagsList = availableTags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
-  const allItemTags = Array.from(new Set(items.flatMap(i => i.tags || [])));
+  // const allItemTags = Array.from(new Set(items.flatMap(i => i.tags || [])));
 
   return (
     <div className="flex h-full w-full text-foreground font-sans antialiased overflow-hidden relative bg-background">

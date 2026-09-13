@@ -1,51 +1,63 @@
 import { z } from "zod";
 
-const ItemTypeEnum = z.enum([
-  "NOTE",
-  "TASK",
+/**
+ * Item validation schemas.
+ *
+ * Aligned with the Prisma `Item` model enums (ItemType / ItemStatus).
+ * Document payloads get light structural validation here — full
+ * schema-fitting is ProseMirror's job on the client.
+ */
+
+export const ItemTypeEnum = z.enum([
+  "QUICK_NOTE",
+  "PAGE",
   "JOURNAL",
+  "TASK",
   "LINK",
-  "TWEET",
   "FILE",
-  "AUDIO",
+  "SOCIAL_CLIP",
 ]);
 
-const ItemStatusEnum = z.enum([
+export const ItemStatusEnum = z.enum([
   "ACTIVE",
-  "INCUBATING",
-  "DONE",
   "ARCHIVED",
+  "COMPLETED",
+  "TRASH",
 ]);
 
-export const createItemSchema = z.object({
+/** Light structural check for a Tiptap document JSON payload. */
+const tiptapDocJson = z
+  .object({
+    type: z.string().min(1),
+    content: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
 
+const projectIdField = z
+  .union([z.string().min(1), z.literal(null)])
+  .optional();
 
-  sectionId: z.string().optional(),
+const deletedAtField = z
+  .union([z.string(), z.date(), z.literal(null)])
+  .optional();
 
-  title: z.string().min(1, "Title is required"),
-
-  type: ItemTypeEnum.optional(),
-
-  status: ItemStatusEnum.optional(),
-
-  // Content
-  contentText: z.string().max(4000).optional().nullable(),
-  contentHtml: z.string().optional().nullable(),
-  url: z.string().url().optional().nullable(),
-
-  // Thinking Studio
-  isPinned: z.boolean().optional(),
-
-  metadata: z.record(z.string(), z.any()).optional().nullable(),
-
-  progressiveSummary: z.string().optional().nullable(),
-
-  // Relations — handled later, not on capture MVP
-  tags: z.array(z.string()).optional(),
-  attachments: z.array(z.string()).optional(),
-  highlights: z.array(z.string()).optional(),
-  shares: z.array(z.string()).optional(),
-  embeddings: z.array(z.string()).optional(),
+/** POST /workspaces/:wid/item/page */
+export const createPageSchema = z.object({
+  title: z.string().max(512).optional(),
+  contentJson: tiptapDocJson.optional().nullable(),
+  contentString: z.string().max(2_000_000).optional(),
+  projectId: projectIdField,
 });
 
-export type CreateItemInput = z.infer<typeof createItemSchema>;
+/** PATCH /workspaces/:wid/item/:itemId — all fields optional. */
+export const updateItemSchema = z.object({
+  title: z.string().max(512).optional(),
+  contentJson: tiptapDocJson.optional().nullable(),
+  contentString: z.string().max(2_000_000).optional(),
+  isPinned: z.boolean().optional(),
+  projectId: projectIdField,
+  deletedAt: deletedAtField,
+});
+
+export type CreatePageInput = z.infer<typeof createPageSchema>;
+export type UpdateItemInput = z.infer<typeof updateItemSchema>;

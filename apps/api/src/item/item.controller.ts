@@ -1,8 +1,28 @@
 import { type Request, type Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
-import { BadRequestError, UnauthorizedError } from "../errors/httpErrors";
+import { BadRequestError, NotFoundError, UnauthorizedError } from "../errors/httpErrors";
 import type { AuthenticatedRequest } from "../types/auth.types";
-import { getInboxItemsService, updateItemService, getPagesService, duplicateItemService, createPageService } from "./item.service";
+import { getInboxItemsService, updateItemService, getPagesService, getPageService, duplicateItemService, createPageService } from "./item.service";
+
+export const getPageController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = (req as AuthenticatedRequest).user?.id;
+    if (!userId) {
+      throw new UnauthorizedError("You are not logged in");
+    }
+    const { workspaceId, itemId } = req.params;
+    if (!workspaceId || !itemId) {
+      throw new BadRequestError("Workspace ID and Item ID are required");
+    }
+
+    const page = await getPageService(workspaceId, itemId);
+    if (!page) {
+      throw new NotFoundError("Page not found");
+    }
+
+    res.status(200).json({ success: true, data: page });
+  }
+);
 
 export const getInboxItemsController = asyncHandler(
   async (req: Request, res: Response) => {
@@ -31,7 +51,8 @@ export const updateItemController = asyncHandler(
       throw new BadRequestError("Workspace ID and Item ID are required");
     }
 
-    const payload = req.body;
+    // Validated + stripped payload from validateSchema middleware.
+    const payload = res.locals.validated ?? req.body;
     const updatedItem = await updateItemService(itemId, workspaceId, payload);
 
     res.status(200).json({ success: true, data: updatedItem });
@@ -65,7 +86,7 @@ export const createPageController = asyncHandler(
       throw new BadRequestError("Workspace ID is required");
     }
 
-    const payload = req.body;
+    const payload = res.locals.validated ?? req.body;
     const page = await createPageService(workspaceId, userId, payload);
     res.status(201).json({ success: true, data: page });
   }

@@ -61,6 +61,30 @@ export async function getPagesService(workspaceId: string) {
   }));
 }
 
+export async function getPageService(workspaceId: string, itemId: string) {
+  const item = await prisma.item.findFirst({
+    where: { id: itemId, workspaceId, type: "PAGE", deletedAt: null },
+  });
+
+  if (!item) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    title: item.title,
+    type: item.type,
+    status: item.status,
+    isPinned: item.isPinned,
+    projectId: item.projectId,
+    workspaceId: item.workspaceId,
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
+    contentJson: item.contentJson ?? null,
+    contentString: item.contentString ?? "",
+  };
+}
+
 export async function createPageService(workspaceId: string, userId: string, payload: { title?: string; contentJson?: any; contentString?: string; projectId?: string }) {
   const item = await prisma.item.create({
     data: {
@@ -79,11 +103,15 @@ export async function createPageService(workspaceId: string, userId: string, pay
 export async function updateItemService(
   itemId: string,
   workspaceId: string,
-  payload: { projectId?: string; isPinned?: boolean; deletedAt?: Date | string | null; title?: string; contentJson?: any; contentString?: string }
+  payload: { projectId?: string | null; isPinned?: boolean; deletedAt?: Date | string | null; title?: string; contentJson?: any; contentString?: string }
 ) {
   const data: Prisma.ItemUpdateInput = {};
   if (payload.projectId !== undefined) {
-    data.project = { connect: { id: payload.projectId } };
+    // null means "remove from project" — connect/disconnect must be chosen
+    // accordingly or Prisma throws on `connect: { id: null }`.
+    data.project = payload.projectId
+      ? { connect: { id: payload.projectId } }
+      : { disconnect: true };
   }
   if (payload.isPinned !== undefined) {
     data.isPinned = payload.isPinned;

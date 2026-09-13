@@ -18,7 +18,8 @@ import {
 	Trash2,
 	MoreHorizontal,
 	FolderGit2,
-	CheckCircle
+	CheckCircle,
+	AlertTriangle
 } from 'lucide-react';
 import { ProjectAssignmentPopover, type ProjectItem } from '../../../components/dashboard/project-assignment-popover';
 import { formatTimeAgo } from '../../../lib/format-time';
@@ -30,8 +31,10 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
-import { NotionEditor } from '../../../components/editor/notion-editor';
+
 import { api, resolveWorkspaceId } from '../../../lib/api';
+import { fetchPage, parseRawDocument, type Page as PageDoc } from '../../../features/pages';
+import { PageWorkspace } from '../../../features/pages/components/page-shell/page-workspace';
 
 type CanvasContent = {
 	id: string;
@@ -52,12 +55,20 @@ export default function PagesPage() {
 	const [pagesData, setPagesData] = useState<GlobalPagesData | null>(null);
 	const [selectedPageId, setSelectedPageId] = useState<string>('primary');
 	const [listCollapsed, setListCollapsed] = useState(false);
-	
+
+	// Fully-loaded document for the selected page (metadata + Tiptap JSON).
+	const [activePage, setActivePage] = useState<PageDoc | null>(null);
+	const [pageLoading, setPageLoading] = useState(false);
+	const [pageLoadError, setPageLoadError] = useState<string | null>(null);
+
+	// Batch-load failure for the pages LIST itself.
+	const [listLoadError, setListLoadError] = useState<string | null>(null);
+
 	const [activePageTagFilter, setActivePageTagFilter] = useState('All');
 	const [pageSearchQuery, setPageSearchQuery] = useState('');
 	const [showPageFilters, setShowPageFilters] = useState(false);
 	const [isRenamingTopBar, setIsRenamingTopBar] = useState(false);
-	
+
 	const [projects, setProjects] = useState<ProjectItem[]>([]);
 	const [projectPopoverOpen, setProjectPopoverOpen] = useState(false);
 	const [toast, setToast] = useState<{ visible: boolean; message: string; projectName?: string; projectId?: string; } | null>(null);
@@ -90,34 +101,40 @@ export default function PagesPage() {
 
 	// Load from API on mount
 	useEffect(() => {
-	    const syncState = async (e?: any) => {
+		const syncState = async (e?: any) => {
 			if (e?.detail?.source === 'pages/page') return;
 			try {
 				const workspaceId = await resolveWorkspaceId();
 				if (!workspaceId) return;
-				
+
 				const [projectsRes, res] = await Promise.all([
 					api.get<{ data: ProjectItem[] }>(`/workspaces/${workspaceId}/project?all=true`),
 					api.get<{ data: any[] }>(`/workspaces/${workspaceId}/item/page`)
 				]);
-				
+
 				setProjects(projectsRes.data || []);
 				const data: GlobalPagesData = {};
-				
+
 				res.data.forEach((page) => {
-					data[page.id] = {
-						id: page.id,
-						title: page.title ?? '',
-						content: typeof page.content === 'string' ? JSON.parse(page.content || '{"type":"doc","content":[]}') : (page.content || { type: 'doc', content: [{ type: 'paragraph' }] }),
-						tags: page.tags || [],
-						isPinned: !!page.isPinned,
-						deletedAt: page.deletedAt,
-						updatedAt: page.updatedAt
-					};
+					// Per-row isolation: one malformed page must never abort
+					// the whole batch (list `content` may be legacy plain text).
+					try {
+						data[page.id] = {
+							id: page.id,
+							title: page.title ?? '',
+							content: parseRawDocument(page.content),
+							tags: page.tags || [],
+							isPinned: !!page.isPinned,
+							deletedAt: page.deletedAt,
+							updatedAt: page.updatedAt
+						};
+					} catch (rowErr) {
+						console.error("Skipping malformed page row:", page.id, rowErr);
+					}
 				});
-				
+
 				setPagesData(data);
-				
+
 				const savedPage = localStorage.getItem(`hm_global_selected_page`);
 				if (savedPage && data[savedPage] && !data[savedPage].deletedAt) {
 					setSelectedPageId(savedPage);
@@ -129,32 +146,33 @@ export default function PagesPage() {
 				}
 			} catch (err) {
 				console.error("Failed to load pages:", err);
+				setListLoadError(err instanceof Error ? err.message : 'Failed to load pages');
 			}
-	    };
+		};
 
-        syncState();
+		syncState();
 
-        window.addEventListener('hm:global-pages-sidebar-toggled', syncState);
-        window.addEventListener('hm:global-page-selected', syncState);
-        window.addEventListener('hm:global-pages-updated', syncState);
-        return () => {
-            window.removeEventListener('hm:global-pages-sidebar-toggled', syncState);
-            window.removeEventListener('hm:global-page-selected', syncState);
-            window.removeEventListener('hm:global-pages-updated', syncState);
-        };
+		window.addEventListener('hm:global-pages-sidebar-toggled', syncState);
+		window.addEventListener('hm:global-page-selected', syncState);
+		window.addEventListener('hm:global-pages-updated', syncState);
+		return () => {
+			window.removeEventListener('hm:global-pages-sidebar-toggled', syncState);
+			window.removeEventListener('hm:global-page-selected', syncState);
+			window.removeEventListener('hm:global-pages-updated', syncState);
+		};
 	}, []);
 
 	const persist = useCallback(async (id: string, updates: Partial<CanvasContent>) => {
 		try {
 			const workspaceId = await resolveWorkspaceId();
 			if (!workspaceId) return;
-			
+
 			const payload: any = {};
 			if (updates.title !== undefined) payload.title = updates.title;
 			if (updates.content !== undefined) payload.contentJson = updates.content;
 			if (updates.deletedAt !== undefined) payload.deletedAt = updates.deletedAt;
 			if (updates.isPinned !== undefined) payload.isPinned = updates.isPinned;
-			
+
 			await api.patch(`/workspaces/${workspaceId}/item/${id}`, payload);
 			window.dispatchEvent(new CustomEvent('hm:global-pages-updated', { detail: { source: 'pages/page' } }));
 		} catch (err) {
@@ -162,35 +180,76 @@ export default function PagesPage() {
 		}
 	}, []);
 
-	const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-	const pendingUpdatesRef = useRef<Partial<CanvasContent>>({});
+	// ── Active page document loading ───────────────────────────────────
+	useEffect(() => {
+		let cancelled = false;
 
-	const debouncedPersist = useCallback((id: string, updates: Partial<CanvasContent>) => {
-		pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...updates };
-		if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-		
-		saveTimeoutRef.current = setTimeout(() => {
-			const payload = { ...pendingUpdatesRef.current };
-			pendingUpdatesRef.current = {};
-			void persist(id, payload);
-		}, 800);
-	}, [persist]);
+		async function loadActivePage() {
+			if (!selectedPageId || selectedPageId === 'primary') {
+				setActivePage(null);
+				return;
+			}
+			const workspaceId = await resolveWorkspaceId();
+			if (!workspaceId || cancelled) return;
 
-	if (!pagesData) return null;
+			setPageLoading(true);
+			setPageLoadError(null);
+			try {
+				const page = await fetchPage(workspaceId, selectedPageId);
+				if (!cancelled) setActivePage(page);
+			} catch (err) {
+				if (!cancelled) {
+					setActivePage(null);
+					setPageLoadError(err instanceof Error ? err.message : 'Failed to load page');
+				}
+			} finally {
+				if (!cancelled) setPageLoading(false);
+			}
+		}
+
+		void loadActivePage();
+		return () => {
+			cancelled = true;
+		};
+	}, [selectedPageId]);
+
+	// Batch-load failure: never leave the user on a silent black screen.
+	if (!pagesData) {
+		if (listLoadError) {
+			return (
+				<div className="flex h-full w-full bg-[#0E0F11] text-[#EEEEEE] font-sans antialiased">
+					<div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+						<div className="w-12 h-12 rounded-full border border-red-500/30 bg-red-500/10 flex items-center justify-center text-red-400">
+							<AlertTriangle className="w-5 h-5" />
+						</div>
+						<div>
+							<h3 className="text-[15px] font-semibold text-[#EEEEEE] mb-1">Pages couldn&rsquo;t be loaded</h3>
+							<p className="text-[13px] text-[#8A8F98]">{listLoadError}</p>
+						</div>
+						<button
+							onClick={() => {
+								setListLoadError(null);
+								window.dispatchEvent(new Event('hm:global-pages-updated'));
+							}}
+							className="px-4 py-2 border border-border rounded-md text-[13px] font-medium text-[#EEEEEE] hover:bg-muted transition-colors"
+						>
+							Retry
+						</button>
+					</div>
+				</div>
+			);
+		}
+		return null;
+	}
 
 	const currentCanvas = pagesData[selectedPageId] || null;
-
-
 
 	// ── Handlers ─────────────────────────────────────────────────────────
 	const updateCanvasTitle = (newTitle: string) => {
 		setPagesData(prev => prev ? { ...prev, [selectedPageId]: { ...prev[selectedPageId], title: newTitle } } : prev);
-		debouncedPersist(selectedPageId, { title: newTitle });
-	};
-
-	const updateCanvasContent = (newContent: any) => {
-		setPagesData(prev => prev ? { ...prev, [selectedPageId]: { ...prev[selectedPageId], content: newContent, updatedAt: new Date().toISOString() } } : prev);
-		debouncedPersist(selectedPageId, { content: newContent });
+		// Keep the loaded document in sync (top-bar rename flows through
+		// here as well as live edits from the editor header).
+		setActivePage(prev => prev && prev.id === selectedPageId ? { ...prev, title: newTitle } : prev);
 	};
 
 	const handleAssignToProject = async (projectId: string, projectName: string) => {
@@ -226,17 +285,17 @@ export default function PagesPage() {
 			console.error("Failed to create and assign project:", err);
 		}
 	};
-	
+
 	const createNewPage = async () => {
 		try {
 			const workspaceId = await resolveWorkspaceId();
 			if (!workspaceId) return;
-			
+
 			const res = await api.post<{ data: any }>(`/workspaces/${workspaceId}/item/page`, {
 				title: 'Untitled Page',
 				contentJson: { type: 'doc', content: [{ type: 'paragraph' }] }
 			});
-			
+
 			const newPage = res.data;
 			setPagesData(prev => prev ? {
 				...prev,
@@ -247,7 +306,7 @@ export default function PagesPage() {
 					tags: []
 				}
 			} : prev);
-			
+
 			setSelectedPageId(newPage.id);
 			localStorage.setItem(`hm_global_selected_page`, newPage.id);
 			window.dispatchEvent(new Event('hm:global-page-selected'));
@@ -256,25 +315,52 @@ export default function PagesPage() {
 			console.error("Failed to create page:", err);
 		}
 	};
-	
+
 	const deletePage = async (e: React.MouseEvent, id: string) => {
-	    e.stopPropagation();
-	    
-	    setPagesData(prev => prev ? { ...prev, [id]: { ...prev[id], deletedAt: new Date().toISOString() } } : prev);
-	    persist(id, { deletedAt: new Date().toISOString() });
-	    
-	    if (selectedPageId === id) {
-	        const activeKeys = Object.keys(pagesData).filter(k => k !== id && !pagesData[k].deletedAt);
-	        const nextId = activeKeys[0];
-	        if (nextId) {
-	            setSelectedPageId(nextId);
-	            localStorage.setItem(`hm_global_selected_page`, nextId);
-	            window.dispatchEvent(new Event('hm:global-page-selected'));
-	        }
-	    }
+		e.stopPropagation();
+
+		setPagesData(prev => prev ? { ...prev, [id]: { ...prev[id], deletedAt: new Date().toISOString() } } : prev);
+		persist(id, { deletedAt: new Date().toISOString() });
+
+		if (selectedPageId === id) {
+			const activeKeys = Object.keys(pagesData).filter(k => k !== id && !pagesData[k].deletedAt);
+			const nextId = activeKeys[0];
+			if (nextId) {
+				setSelectedPageId(nextId);
+				localStorage.setItem(`hm_global_selected_page`, nextId);
+				window.dispatchEvent(new Event('hm:global-page-selected'));
+			}
+		}
 	};
 
-	const editorTitle = currentCanvas?.title ?? '';
+	// Batch-load failure: never leave the user on a silent black screen.
+	if (!pagesData) {
+		if (listLoadError) {
+			return (
+				<div className="flex h-full w-full bg-[#0E0F11] text-[#EEEEEE] font-sans antialiased">
+					<div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+						<div className="w-12 h-12 rounded-full border border-red-500/30 bg-red-500/10 flex items-center justify-center text-red-400">
+							<AlertTriangle className="w-5 h-5" />
+						</div>
+						<div>
+							<h3 className="text-[15px] font-semibold text-[#EEEEEE] mb-1">Pages couldn&rsquo;t be loaded</h3>
+							<p className="text-[13px] text-[#8A8F98]">{listLoadError}</p>
+						</div>
+						<button
+							onClick={() => {
+								setListLoadError(null);
+								window.dispatchEvent(new Event('hm:global-pages-updated'));
+							}}
+							className="px-4 py-2 border border-border rounded-md text-[13px] font-medium text-[#EEEEEE] hover:bg-muted transition-colors"
+						>
+							Retry
+						</button>
+					</div>
+				</div>
+			);
+		}
+		return null;
+	}
 
 	return (
 		<div className="flex h-full w-full bg-[#0E0F11] text-[#EEEEEE] font-sans antialiased overflow-hidden relative">
@@ -309,8 +395,8 @@ export default function PagesPage() {
 						</button>
 						<button
 							onClick={() => {
-							    setListCollapsed(true);
-							    localStorage.setItem('hm_global_pages_sidebar_hidden', 'true');
+								setListCollapsed(true);
+								localStorage.setItem('hm_global_pages_sidebar_hidden', 'true');
 							}}
 							className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
 							title="Collapse panel"
@@ -519,8 +605,8 @@ export default function PagesPage() {
 						{listCollapsed && (
 							<button
 								onClick={() => {
-								    setListCollapsed(false);
-								    localStorage.setItem('hm_global_pages_sidebar_hidden', 'false');
+									setListCollapsed(false);
+									localStorage.setItem('hm_global_pages_sidebar_hidden', 'false');
 								}}
 								className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
 								title="Expand panel"
@@ -542,8 +628,8 @@ export default function PagesPage() {
 					{currentCanvas && (
 						<div className="flex items-center gap-1.5 shrink-0 ml-4 relative">
 							<span className="text-[12px] text-[#5A5D66] mr-2">Edited {formatTimeAgo(currentCanvas.updatedAt)}</span>
-							
-							<button 
+
+							<button
 								onClick={async () => {
 									try {
 										const workspaceId = await resolveWorkspaceId();
@@ -561,7 +647,7 @@ export default function PagesPage() {
 								<Pin className={`w-4 h-4 ${currentCanvas.isPinned ? "fill-current text-[#EEEEEE]" : ""}`} />
 							</button>
 
-							<button 
+							<button
 								onClick={() => {
 									navigator.clipboard.writeText(`${window.location.origin}/dashboard/pages`);
 									showToast("Link copied to clipboard");
@@ -571,7 +657,7 @@ export default function PagesPage() {
 							>
 								<Copy className="w-4 h-4" />
 							</button>
-							
+
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<button className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
@@ -653,18 +739,18 @@ export default function PagesPage() {
 
 							{isRenamingTopBar && (
 								<>
-									<div 
-										className="fixed inset-0 z-40" 
+									<div
+										className="fixed inset-0 z-40"
 										onClick={(e) => {
 											e.stopPropagation();
 											setIsRenamingTopBar(false);
-										}} 
+										}}
 									/>
 									<div className="absolute top-[38px] right-0 z-50 bg-[#151618] border border-[#27282B] rounded-[6px] shadow-2xl p-1 flex items-center gap-1.5 w-[360px]">
 										<div className="flex items-center justify-center w-7 h-7 rounded-[4px] border border-[#27282B] bg-[#0E0F11] shrink-0 text-[#8A8F98]">
 											<FileText className="w-4 h-4" />
 										</div>
-										<input 
+										<input
 											autoFocus
 											value={currentCanvas?.title ?? ''}
 											onChange={(e) => updateCanvasTitle(e.target.value)}
@@ -697,33 +783,50 @@ export default function PagesPage() {
 					</div>
 				) : (
 					<div ref={editorContainerRef} className="flex-1 overflow-y-auto scrollbar-hide">
-						<div className="max-w-[760px] mx-auto py-16 px-8 md:px-12">
-							{/* Title Block */}
-							<div className="mb-8">
-								<input
-									type="text"
-									value={editorTitle}
-									onChange={(e) => updateCanvasTitle(e.target.value)}
-									className="w-full bg-transparent text-[32px] font-semibold text-[#EEEEEE] placeholder:text-[#5A5D66] outline-none border-none focus:ring-0 p-0 m-0"
-									placeholder="Untitled"
-								/>
+						{pageLoading && (
+							<div className="max-w-[760px] mx-auto py-16 px-8 md:px-12" aria-busy="true" aria-label="Loading page">
+								<div className="hym-editor-loading">
+									<div className="hym-skeleton-line w-2/5 !h-7" />
+									<div className="mt-4 hym-skeleton-line w-full" />
+									<div className="hym-skeleton-line w-5/6" />
+									<div className="hym-skeleton-line w-3/5" />
+								</div>
 							</div>
+						)}
 
-							{/* Editor Component */}
-							{currentCanvas && (
-	    						<div className="mt-4">
-	    							<NotionEditor 
-	    								key={selectedPageId}
-	    								initialContent={currentCanvas.content || { type: 'doc', content: [{ type: 'paragraph' }] }}
-	    								onUpdate={(newContent) => updateCanvasContent(newContent)}
-	    							/>
-	    						</div>
-							)}
-						</div>
+						{!pageLoading && pageLoadError && (
+							<div className="flex flex-col items-center justify-center gap-4 px-6 py-24 text-center">
+								<div className="w-12 h-12 rounded-full border border-red-500/30 bg-red-500/10 flex items-center justify-center text-red-400">
+									<AlertTriangle className="w-5 h-5" />
+								</div>
+								<div>
+									<h3 className="text-[15px] font-semibold text-[#EEEEEE] mb-1">This page couldn&rsquo;t be loaded</h3>
+									<p className="text-[13px] text-[#8A8F98]">{pageLoadError}</p>
+								</div>
+								<button
+									onClick={() => {
+										const id = selectedPageId;
+										setSelectedPageId('');
+										requestAnimationFrame(() => setSelectedPageId(id));
+									}}
+									className="px-4 py-2 border border-border rounded-md text-[13px] font-medium text-[#EEEEEE] hover:bg-muted transition-colors"
+								>
+									Retry
+								</button>
+							</div>
+						)}
+
+						{!pageLoading && activePage && (
+							<PageWorkspace
+								key={activePage.id}
+								page={activePage}
+								onTitleChange={updateCanvasTitle}
+							/>
+						)}
 					</div>
 				)}
 			</div>
-			
+
 			<ProjectAssignmentPopover
 				isOpen={projectPopoverOpen}
 				onClose={() => setProjectPopoverOpen(false)}

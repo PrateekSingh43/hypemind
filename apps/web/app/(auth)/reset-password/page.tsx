@@ -53,8 +53,12 @@ function ResetPasswordContent() {
 			}
 
 			setSuccess(true);
-		} catch (err: any) {
-			setError(err.message || "Failed to reset password");
+		} catch (err: unknown) {
+			if (err instanceof Error) {
+				setError(err.message || "Failed to reset password");
+			} else {
+				setError("Failed to reset password");
+			}
 		} finally {
 			setIsLoading(false);
 		}

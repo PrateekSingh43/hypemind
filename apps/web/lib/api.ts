@@ -1,3 +1,5 @@
+//C:\Users\prate\hypemind\apps\web\lib\api.ts
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
@@ -226,7 +228,7 @@ async function refreshAccessToken(redirectOnAuthFailure = true) {
 }
 
 async function fetchWithTimeout(
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   endpointPath: string,
   body: unknown,
   init: ApiRequestInit | undefined,
@@ -273,7 +275,7 @@ async function fetchWithTimeout(
 }
 
 async function request<T>(
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   endpoint: string,
   body?: unknown,
   init?: ApiRequestInit,
@@ -334,6 +336,11 @@ async function request<T>(
 
 export function setAccessToken(token: string) {
   inMemoryAccessToken = token;
+}
+
+/** Base URL for direct fetches that need options the api wrapper lacks (e.g. keepalive). */
+export function getApiBaseUrl() {
+  return API_BASE_URL;
 }
 
 export function clearAccessToken() {
@@ -440,5 +447,8 @@ export const api = {
     init?: ApiRequestInit,
   ): Promise<T> => {
     return request<T>("PATCH", endpoint, data, init);
+  },
+  delete: async <T>(endpoint: string, init?: ApiRequestInit): Promise<T> => {
+    return request<T>("DELETE", endpoint, undefined, init);
   },
 };

@@ -1,3 +1,5 @@
+//app\dashboard\project\[id]\page.tsx
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -45,7 +47,7 @@ import { formatTimeAgo } from '../../../../lib/format-time';
 import { useParams, useSearchParams } from 'next/navigation';
 import { ItemContentView } from '../../../../components/dashboard/item-content-view';
 import { QuickNoteEditor, EMPTY_DOC } from '../../../../components/dashboard/quick-note-editor';
-import { NotionEditor } from '../../../../components/editor/notion-editor';
+import { Editor } from '../../../../components/editor/editor';
 import { PageAssignmentPopover } from '../../../../components/dashboard/page-assignment-popover';
 import { ProjectAssignmentPopover, type ProjectItem as AssignmentProjectItem } from '../../../../components/dashboard/project-assignment-popover';
 import { api, resolveWorkspaceId } from '../../../../lib/api';
@@ -118,7 +120,7 @@ export default function ProjectDetailView() {
 	const [selectedPageId, setSelectedPageId] = useState<string>('primary');
 	const [projectData, setProjectData] = useState<ProjectData | null>(null);
 	const [listCollapsed, setListCollapsed] = useState(false);
-	
+
 	const [pagePopoverOpen, setPagePopoverOpen] = useState(false);
 	const [selectedResourceForPageAssign, setSelectedResourceForPageAssign] = useState<string | null>(null);
 
@@ -162,7 +164,7 @@ export default function ProjectDetailView() {
 				if (!isMounted) return;
 				const project = res.data;
 				setProjects(projectsRes.data || []);
-				
+
 				setMeta({ name: project.title, area: project.area?.title || 'Unknown Area' });
 
 				const allItems = project.items || [];
@@ -213,12 +215,12 @@ export default function ProjectDetailView() {
 						console.error("Failed to create default page", err);
 					}
 				}
-				
+
 				setProjectData({
 					items: formattedItems,
 					canvasContent: loadedCanvas,
 				});
-				
+
 				if (formattedItems.length > 0) {
 					const savedResource = localStorage.getItem(`hm_project_${projectId}_resource`);
 					if (savedResource && formattedItems.some((i: any) => i.id === savedResource)) {
@@ -227,7 +229,7 @@ export default function ProjectDetailView() {
 						setSelectedResourceId(formattedItems[0].id);
 					}
 				}
-				
+
 				const savedPage = localStorage.getItem(`hm_project_${projectId}_page`);
 				if (savedPage && loadedCanvas[savedPage]) {
 					setSelectedPageId(savedPage);
@@ -244,10 +246,10 @@ export default function ProjectDetailView() {
 		const syncState = () => {
 			const savedResource = localStorage.getItem(`hm_project_${projectId}_resource`);
 			if (savedResource) setSelectedResourceId(savedResource);
-			
+
 			const savedPage = localStorage.getItem(`hm_project_${projectId}_page`);
 			if (savedPage) setSelectedPageId(savedPage);
-			
+
 			const mode = localStorage.getItem(`hm_project_${projectId}_sidebar_mode`);
 			if (mode === 'pages' || mode === 'resources') setSidebarMode(mode);
 		};
@@ -269,7 +271,7 @@ export default function ProjectDetailView() {
 			if (updates.title !== undefined) payload.title = updates.title;
 			if (updates.content !== undefined) payload.contentString = updates.content;
 			if (updates.isPinned !== undefined) payload.isPinned = updates.isPinned;
-			
+
 			await api.patch(`/workspaces/${workspaceId}/item/${id}`, payload);
 		} catch (err) {
 			console.error("Failed to update item", err);
@@ -284,7 +286,7 @@ export default function ProjectDetailView() {
 			if (updates.title !== undefined) payload.title = updates.title;
 			if (updates.content !== undefined) payload.contentJson = updates.content;
 			if (updates.isPinned !== undefined) payload.isPinned = updates.isPinned;
-			
+
 			await api.patch(`/workspaces/${workspaceId}/item/${id}`, payload);
 		} catch (err) {
 			console.error("Failed to update item", err);
@@ -381,24 +383,24 @@ export default function ProjectDetailView() {
 	};
 
 	const deletePage = (e: React.MouseEvent, id: string) => {
-	    e.stopPropagation();
-	    const keys = Object.keys(canvasContent);
-	    if (keys.length <= 1) return; // don't delete the last page
-	    
-	    setProjectData((prev) => {
+		e.stopPropagation();
+		const keys = Object.keys(canvasContent);
+		if (keys.length <= 1) return; // don't delete the last page
+
+		setProjectData((prev) => {
 			if (!prev) return prev;
 			const newCanvas = { ...prev.canvasContent };
 			delete newCanvas[id];
 			return { ...prev, canvasContent: newCanvas };
 		});
 		persistCanvas(id, { content: { type: 'doc', content: [] } }); // soft delete or similar
-	    
-	    if (selectedPageId === id) {
+
+		if (selectedPageId === id) {
 			const activeKeys = Object.keys(canvasContent).filter(k => k !== id);
-	        const nextId = activeKeys[0];
-	        setSelectedPageId(nextId);
-	        localStorage.setItem(`hm_project_${projectId}_page`, nextId);
-	    }
+			const nextId = activeKeys[0];
+			setSelectedPageId(nextId);
+			localStorage.setItem(`hm_project_${projectId}_page`, nextId);
+		}
 	};
 
 	const updateResourceTitle = (newTitle: string) => {
@@ -428,7 +430,7 @@ export default function ProjectDetailView() {
 
 	const handleAssignToPage = (targetPageId: string, pageTitle: string) => {
 		if (!selectedResourceForPageAssign) return;
-		
+
 		const resource = items.find(i => i.id === selectedResourceForPageAssign);
 		if (!resource) return;
 
@@ -518,7 +520,7 @@ export default function ProjectDetailView() {
 
 		setPagePopoverOpen(false);
 		setSelectedResourceForPageAssign(null);
-		
+
 		showToast('Added to', pageTitle, targetPageId);
 	};
 
@@ -613,9 +615,9 @@ export default function ProjectDetailView() {
 					<span className="text-[13px] font-semibold text-[#EEEEEE]">Project Items</span>
 					<button
 						onClick={() => {
-                            setListCollapsed(true);
-                            localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'true');
-                        }}
+							setListCollapsed(true);
+							localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'true');
+						}}
 						className="p-1 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors"
 						title="Collapse panel"
 					>
@@ -941,12 +943,12 @@ export default function ProjectDetailView() {
 								</>
 							)}
 						</div>
-						
+
 						{currentItem && (
 							<div className="flex items-center gap-1.5 shrink-0 ml-4 relative">
 								<span className="text-[12px] text-[#5A5D66] mr-2">Edited {formatTimeAgo(currentItem.time)}</span>
-								
-								<button 
+
+								<button
 									onClick={async () => {
 										try {
 											await persistResource(currentItem.id, { isPinned: !currentItem.isPinned });
@@ -965,7 +967,7 @@ export default function ProjectDetailView() {
 									<Pin className={`w-4 h-4 ${currentItem.isPinned ? "fill-current text-[#EEEEEE]" : ""}`} />
 								</button>
 
-								<button 
+								<button
 									onClick={() => {
 										navigator.clipboard.writeText(window.location.href);
 										showToast("Link copied to clipboard");
@@ -975,7 +977,7 @@ export default function ProjectDetailView() {
 								>
 									<Copy className="w-4 h-4" />
 								</button>
-								
+
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<button className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
@@ -1067,18 +1069,18 @@ export default function ProjectDetailView() {
 									const CurrentIcon = getIcon(currentItem.type);
 									return (
 										<>
-											<div 
-												className="fixed inset-0 z-40" 
+											<div
+												className="fixed inset-0 z-40"
 												onClick={(e) => {
 													e.stopPropagation();
 													setIsRenamingTopBar(false);
-												}} 
+												}}
 											/>
 											<div className="absolute top-[38px] right-0 z-50 bg-[#151618] border border-[#27282B] rounded-[6px] shadow-2xl p-1 flex items-center gap-1.5 w-[360px]">
 												<div className="flex items-center justify-center w-7 h-7 rounded-[4px] border border-[#27282B] bg-[#0E0F11] shrink-0 text-[#8A8F98]">
 													<CurrentIcon className="w-4 h-4" />
 												</div>
-												<input 
+												<input
 													autoFocus
 													value={currentItem.title || ''}
 													onChange={(e) => updateResourceTitle(e.target.value)}
@@ -1101,22 +1103,22 @@ export default function ProjectDetailView() {
 										key={selectedResourceId || 'none'}
 										title={currentItem.title || ''}
 										tags={currentItem.tags || []}
-									initialContentString={currentItem.content || ''}
-									onUpdateTitle={updateResourceTitle}
-									onUpdateTags={(tags) => {
-										const updatedItems = items.map(i => i.id === selectedResourceId ? { ...i, tags } : i);
-										setProjectData((prev) => {
-											if (!prev) return prev;
-											return { ...prev, items: updatedItems };
-										});
-										// Note: tags update isn't fully implemented in persistItem payload in API, but if it is, we'd do it here.
-										// Actually we could do persistItem(selectedResourceId, { tags });
-									}}
-									onUpdateContent={(contentString) => {
-										updateResourceContent(contentString);
-									}}
-									onAddPage={() => openPageAssignment(currentItem.id)}
-								/>
+										initialContentString={currentItem.content || ''}
+										onUpdateTitle={updateResourceTitle}
+										onUpdateTags={(tags) => {
+											const updatedItems = items.map(i => i.id === selectedResourceId ? { ...i, tags } : i);
+											setProjectData((prev) => {
+												if (!prev) return prev;
+												return { ...prev, items: updatedItems };
+											});
+											// Note: tags update isn't fully implemented in persistItem payload in API, but if it is, we'd do it here.
+											// Actually we could do persistItem(selectedResourceId, { tags });
+										}}
+										onUpdateContent={(contentString) => {
+											updateResourceContent(contentString);
+										}}
+										onAddPage={() => openPageAssignment(currentItem.id)}
+									/>
 								</div>
 							</div>
 						) : (
@@ -1128,7 +1130,7 @@ export default function ProjectDetailView() {
 								tagsCount={currentItem.tags?.length || 0}
 								bottomStatusText={currentItem.status === 'UNUSED' ? 'Not in use currently' : 'Currently in use'}
 								bottomActions={
-									<button 
+									<button
 										onClick={() => openPageAssignment(currentItem.id)}
 										className="flex items-center px-4 py-1.5 rounded-md bg-[#EEEEEE] text-[#0E0F11] text-[12px] font-semibold hover:bg-white transition-colors shadow-sm"
 									>
@@ -1152,9 +1154,9 @@ export default function ProjectDetailView() {
 							{listCollapsed && (
 								<button
 									onClick={() => {
-                                        setListCollapsed(false);
-                                        localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'false');
-                                    }}
+										setListCollapsed(false);
+										localStorage.setItem(`hm_project_${projectId}_sidebar_hidden`, 'false');
+									}}
 									className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors mr-1"
 									title="Expand panel"
 								>
@@ -1175,12 +1177,12 @@ export default function ProjectDetailView() {
 
 							<span className="text-[11px] text-[#5A5D66] shrink-0 hidden md:block ml-2">· {itemCount} items</span>
 						</div>
-						
+
 						{currentCanvas && (
 							<div className="flex items-center gap-1.5 shrink-0 ml-4 relative">
 								<span className="text-[12px] text-[#5A5D66] mr-2">Edited {formatTimeAgo(currentCanvas.updatedAt)}</span>
-								
-								<button 
+
+								<button
 									onClick={async () => {
 										try {
 											await persistCanvas(selectedPageId, { isPinned: !currentCanvas.isPinned });
@@ -1202,7 +1204,7 @@ export default function ProjectDetailView() {
 									<Pin className={`w-4 h-4 ${currentCanvas.isPinned ? "fill-current text-[#EEEEEE]" : ""}`} />
 								</button>
 
-								<button 
+								<button
 									onClick={() => {
 										navigator.clipboard.writeText(window.location.href);
 										showToast("Link copied to clipboard");
@@ -1212,7 +1214,7 @@ export default function ProjectDetailView() {
 								>
 									<Copy className="w-4 h-4" />
 								</button>
-								
+
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<button className="p-1.5 rounded-md text-[#8A8F98] hover:text-[#EEEEEE] hover:bg-[#26272B] transition-colors">
@@ -1290,7 +1292,7 @@ export default function ProjectDetailView() {
 														delete newCanvas[selectedPageId];
 														return { ...prev, canvasContent: newCanvas };
 													});
-													
+
 													const activeKeys = Object.keys(canvasContent).filter(k => k !== selectedPageId);
 													const firstKey = activeKeys[0] || 'primary';
 													setSelectedPageId(firstKey);
@@ -1307,18 +1309,18 @@ export default function ProjectDetailView() {
 
 								{isRenamingTopBar && (
 									<>
-										<div 
-											className="fixed inset-0 z-40" 
+										<div
+											className="fixed inset-0 z-40"
 											onClick={(e) => {
 												e.stopPropagation();
 												setIsRenamingTopBar(false);
-											}} 
+											}}
 										/>
 										<div className="absolute top-[38px] right-0 z-50 bg-[#151618] border border-[#27282B] rounded-[6px] shadow-2xl p-1 flex items-center gap-1.5 w-[360px]">
 											<div className="flex items-center justify-center w-7 h-7 rounded-[4px] border border-[#27282B] bg-[#0E0F11] shrink-0 text-[#8A8F98]">
 												<FileText className="w-4 h-4" />
 											</div>
-											<input 
+											<input
 												autoFocus
 												value={currentCanvas.title ?? ''}
 												onChange={(e) => updateCanvasTitle(e.target.value)}
@@ -1349,10 +1351,10 @@ export default function ProjectDetailView() {
 
 							{/* Editor Component */}
 							<div className="mt-4">
-								<NotionEditor 
+								<Editor
 									key={selectedPageId}
 									initialContent={currentCanvas?.content || { type: 'doc', content: [{ type: 'paragraph' }] }}
-									onUpdate={(newContent) => updateCanvasContent(newContent)}
+									onUpdate={(newContent: any) => updateCanvasContent(newContent)}
 								/>
 							</div>
 
@@ -1360,7 +1362,7 @@ export default function ProjectDetailView() {
 					</div>
 				</div>
 			)}
-			
+
 			<PageAssignmentPopover
 				isOpen={pagePopoverOpen}
 				onClose={() => {
@@ -1370,7 +1372,7 @@ export default function ProjectDetailView() {
 				pages={Object.entries(canvasContent).map(([id, page]) => ({ id, title: page.title || 'Untitled' }))}
 				onAssign={handleAssignToPage}
 			/>
-			
+
 			<ProjectAssignmentPopover
 				isOpen={projectPopoverOpen}
 				onClose={() => setProjectPopoverOpen(false)}

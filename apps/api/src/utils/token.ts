@@ -167,5 +167,5 @@ export const verifyPasswordResetToken = async (rawToken: string) => {
 
   if (tokenRecord.usedAt !== null) return null;
 
-  return { userId: tokenRecord.userId };
+  return { userId: tokenRecord.userId, tokenHash };
 };

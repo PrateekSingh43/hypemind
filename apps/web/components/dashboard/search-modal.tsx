@@ -23,6 +23,7 @@ import {
   Loader2,
   SearchX,
   ArrowRight,
+  LucideIcon,
 } from "lucide-react";
 import { api, getWorkspaceId, resolveWorkspaceId } from "../../lib/api";
 
@@ -55,7 +56,7 @@ type SearchModalProps = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const ITEM_TYPE_MAP: Record<string, { icon: any; label: string }> =
+const ITEM_TYPE_MAP: Record<string, { icon: LucideIcon; label: string }> =
   {
     QUICK_NOTE: { icon: FilePenLine, label: "Quick Note" },
     PAGE: { icon: FileText, label: "Page" },
@@ -114,7 +115,7 @@ function highlightMatch(text: string, query: string) {
     regex.test(part) ? (
       <mark
         key={i}
-        className="bg-primary/20 text-foreground rounded-[2px] px-[1px]"
+        className="bg-primary/20 text-foreground rounded-xs px-px"
       >
         {part}
       </mark>
@@ -164,7 +165,7 @@ function ResultRow({
       onClick={() => onSelect(item)}
       onMouseEnter={onMouseEnter}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-[8px] text-left
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left
         transition-colors duration-75 cursor-pointer group/row outline-none
         ${
           isSelected
@@ -175,7 +176,7 @@ function ResultRow({
     >
       <div
         className={`
-        w-8 h-8 rounded-[6px] flex items-center justify-center shrink-0
+        w-8 h-8 rounded-md flex items-center justify-center shrink-0
         transition-colors duration-75
         ${isSelected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground group-hover/row:bg-primary/10 group-hover/row:text-primary"}
       `}
@@ -417,17 +418,17 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[200] bg-background/60 backdrop-blur-sm search-backdrop-animate"
+        className="fixed inset-0 z-200 bg-background/60 backdrop-blur-sm search-backdrop-animate"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-[201] flex items-start justify-center pt-[15vh] px-4">
+      <div className="fixed inset-0 z-201 flex items-start justify-center pt-[15vh] px-4">
         <div
           className="
-            w-full max-w-[560px]
+            w-full max-w-140
             bg-surface border border-border
-            rounded-[12px] shadow-2xl shadow-black/20
+            rounded-xl shadow-2xl shadow-black/20
             overflow-hidden
             search-modal-animate
           "
@@ -435,7 +436,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         >
           {/* Search Input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-            <Search className="w-[18px] h-[18px] text-muted-foreground shrink-0" />
+            <Search className="w-4.5 h-4.5 text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
               type="text"
@@ -480,7 +481,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
           {/* Results Area */}
           <div
             ref={listRef}
-            className="max-h-[380px] overflow-y-auto overflow-x-hidden scrollbar-hide"
+            className="max-h-95 overflow-y-auto overflow-x-hidden scrollbar-hide"
           >
             {/* Loading state for suggestions */}
             {!isShowingSearch && isSuggestionsLoading && (
